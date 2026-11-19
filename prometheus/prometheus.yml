@@ -1,0 +1,14 @@
+scrape_configs:
+  - job_name: "metabase"
+
+    # Override the global default and scrape targets from this job every 5 seconds.
+    scrape_interval: 5s
+    # use whatever port here that you set for MB_PROMETHEUS_SERVER_PORT
+    static_configs:
+      - targets: ["metabase:9191"]
+  - job_name: trino
+    basic_auth:
+      username: trino-user
+    static_configs:
+      - targets:
+        - trino:8080

@@ -1,0 +1,18 @@
+$kind: http-request
+description: "The server reports the caller's groups, and that an Analyst is not an admin"
+url: localhost:8000/api/me
+method: GET
+headers:
+  - key: X-Forwarded-Email
+    value: "{{ANALYST_EMAIL}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Me as Analyst", function() {
+          pm.response.to.have.status(200);
+          const me = pm.response.json();
+          pm.expect(me.groups).to.eql(['Analysts']);
+          pm.expect(me.admin).to.be.false;
+      });
+    language: text/javascript
+order: 6000

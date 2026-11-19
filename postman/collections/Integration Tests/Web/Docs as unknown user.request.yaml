@@ -1,0 +1,15 @@
+$kind: http-request
+description: "Someone who is in no Metabase group is refused"
+url: localhost:8000/
+method: GET
+headers:
+  - key: X-Forwarded-Email
+    value: "nobody@example.com"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Docs as unknown user", function() {
+          pm.response.to.have.status(403);
+      });
+    language: text/javascript
+order: 2000

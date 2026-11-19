@@ -1,0 +1,16 @@
+$kind: http-request
+description: "An Administrator gets the admin pages"
+url: localhost:8000/admin/
+method: GET
+headers:
+  - key: X-Forwarded-Email
+    value: "{{ADMIN_EMAIL}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Admin page as Admin", function() {
+          pm.response.to.have.status(200);
+          pm.expect(pm.response.text()).to.include('Admin');
+      });
+    language: text/javascript
+order: 5000

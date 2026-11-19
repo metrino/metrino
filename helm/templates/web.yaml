@@ -1,0 +1,303 @@
+{{- if .Values.web.enabled }}
+{{- $host := required "web.host is required when web.enabled is true" .Values.web.host }}
+{{- $image := .Values.web.image }}
+{{- $tag := required "web.image.tag is required when web.enabled is true (CI sets it)" $image.tag }}
+# The docs and admin site (web/): docs for anyone in a Metabase group, admin pages for Administrators. People
+# sign in with Google through oauth2-proxy, the only container with a port in the Service. The web server
+# decides what each person sees from the group file and its own OPA, which runs Trino's access policy. Nothing
+# in this pod connects to Trino: Trino's NetworkPolicy only admits Metabase and Trino's own pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "metrino.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "metrino.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    spec:
+      # Nothing here talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      initContainers:
+      # The Metabase sync, configured like the coordinator's in values.yaml (trino.initContainers); keep the two in
+      # step. It writes this pod's own copy of the group file: the coordinator's can't be shared, because the
+      # cluster's volumes are ReadWriteOnce. A native sidecar (restartPolicy: Always): it keeps running, and the
+      # other containers only start once its startup probe sees the group file. It's the only container with
+      # the Metabase API key. Unlike the coordinator's, it also writes the schema file: the columns of the Trino
+      # tables Metabase knows, for the admin page.
+      - name: metabase-sync
+        {{- with .Values.trino.identityImage }}
+        image: {{ printf "%s/%s:%s" .registry .repository (required "trino.identityImage.tag is required (CI sets it)" .tag) | quote }}
+        {{- end }}
+        command: ["metabase-sync"]
+        restartPolicy: Always
+        env:
+          - name: METABASE_URL
+            value: http://metabase-service
+          - name: METABASE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.metabase.apiKeySecret.name }}
+                key: {{ .Values.metabase.apiKeySecret.key }}
+          - name: GROUP_FILE
+            value: /groups/group.txt
+          - name: SCHEMA_FILE
+            value: /groups/schema.json
+          - name: STATUS_FILE
+            value: /groups/status.json
+          # Metabase runs in the reverse proxy's pod, so a connection to either spelling of loopback is the proxy.
+          - name: TRINO_PROXY_ADDRESSES
+            value: {{ printf "127.0.0.1:%v,localhost:%v" .Values.metabase.reverseProxyPort .Values.metabase.reverseProxyPort | quote }}
+          - name: SYNC_INTERVAL
+            value: "30s"
+        startupProbe:
+          exec:
+            command: ["test", "-f", "/groups/group.txt"]
+          periodSeconds: 2
+          failureThreshold: 30
+        volumeMounts:
+          - name: groups
+            mountPath: /groups
+        securityContext:
+          # The image's nobody user. Given as a number so Kubernetes can check runAsNonRoot.
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+      containers:
+      # Google sign-in. Signed-in requests go to the web server with the person's email in X-Forwarded-Email;
+      # oauth2-proxy sets that header itself, replacing any the client sent.
+      - name: oauth2-proxy
+        image: {{ .Values.web.oauth2Proxy.image | quote }}
+        args:
+          - --provider=google
+          - --http-address=0.0.0.0:4180
+          - --upstream=http://127.0.0.1:8000
+          - {{ printf "--redirect-url=https://%s/oauth2/callback" $host | quote }}
+          # Behind the ingress controller, which sets X-Forwarded-Proto and X-Forwarded-Host.
+          - --reverse-proxy=true
+          # Show a "Sign in with Google" page rather than redirecting straight to Google. Otherwise signing out
+          # (the header's /oauth2/sign_out link) would sign the person straight back in.
+          - --skip-provider-button=false
+          {{- range .Values.web.emailDomains }}
+          - {{ printf "--email-domain=%s" . | quote }}
+          {{- end }}
+        env:
+          - name: OAUTH2_PROXY_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.web.oauth2Proxy.secretName }}
+                key: client-id
+          - name: OAUTH2_PROXY_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.web.oauth2Proxy.secretName }}
+                key: client-secret
+          - name: OAUTH2_PROXY_COOKIE_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.web.oauth2Proxy.secretName }}
+                key: cookie-secret
+        ports:
+          - name: http
+            containerPort: 4180
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65532
+          runAsGroup: 65532
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+      # The web server. It believes X-Forwarded-Email because it listens on 127.0.0.1:8000 (its default; WEB_HOST
+      # must stay unset), so only oauth2-proxy, in the same pod, can reach it. For the same reason the kubelet
+      # can't reach it either, so its liveness probe runs wget inside the container instead of httpGet.
+      - name: web
+        image: {{ printf "%s/%s:%s" $image.registry $image.repository $tag | quote }}
+        enableServiceLinks: false
+        env:
+          - name: GROUP_FILE
+            value: /groups/group.txt
+          - name: SCHEMA_FILE
+            value: /groups/schema.json
+          - name: STATUS_FILE
+            value: /groups/status.json
+          # Names only: the catalogs' properties hold passwords, and the web pod has no business with them. Helm
+          # merges the Trino chart's own catalogs (tpch, tpcds) in, and a catalog set to null drops out, as in the
+          # chart. The chart also still reads the deprecated additionalCatalogs.
+          - name: TRINO_CATALOGS
+            value: {{ keys (.Values.trino.catalogs | default dict) (.Values.trino.additionalCatalogs | default dict) | uniq | sortAlpha | join "," | quote }}
+          {{- with .Values.web.metabaseLinkUrl }}
+          - name: METABASE_LINK_URL
+            value: {{ . | quote }}
+          {{- end }}
+          {{- with .Values.web.prometheusLinkUrl }}
+          - name: PROMETHEUS_LINK_URL
+            value: {{ . | quote }}
+          {{- end }}
+        livenessProbe:
+          exec:
+            command: ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/healthz"]
+        volumeMounts:
+          - name: groups
+            mountPath: /groups
+            readOnly: true
+        securityContext:
+          # The image's nobody user.
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+      # The web server's OPA, with the same policy ConfigMap as Trino's, so it answers as Trino's OPA does.
+      # --watch reloads the policy when the ConfigMap changes, as Trino's OPA does. Its API listens on loopback
+      # only, and --authorization=basic with the authz ConfigMap (helm/opa-web/authz.rego) keeps it read-only:
+      # without it, OPA accepts unauthenticated writes that could replace the policy.
+      - name: opa
+        image: openpolicyagent/opa:1.21.2-static
+        args:
+          - run
+          - --server
+          - --addr=127.0.0.1:8181
+          - --diagnostic-addr=0.0.0.0:8282
+          - --authorization=basic
+          - --watch
+          # Skips the ConfigMap volumes' hidden ..data directories, which hold a second copy of each file.
+          - --ignore=..*
+          - /policies
+          - /authz
+        # tcpSocket, not httpGet /health: the authz policy also guards the diagnostic listener, so /health
+        # answers 401 there and an httpGet probe would never pass.
+        livenessProbe:
+          tcpSocket:
+            port: 8282
+        readinessProbe:
+          tcpSocket:
+            port: 8282
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+        volumeMounts:
+          - name: policies
+            mountPath: /policies
+            readOnly: true
+          - name: authz
+            mountPath: /authz
+            readOnly: true
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65532
+          runAsGroup: 65532
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+      volumes:
+        - name: groups
+          emptyDir: {}
+        - name: policies
+          configMap:
+            name: {{ .Values.trino.opa.policyConfigMap }}
+        - name: authz
+          configMap:
+            name: web-opa-authz
+      {{- with .Values.web.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# Only oauth2-proxy's port.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  selector:
+    {{- include "metrino.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 4180
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  {{- with .Values.web.ingressAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  rules:
+  - host: {{ $host | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web
+            port:
+              number: 80
+---
+# Only oauth2-proxy's port may be reached from outside the pod. The web server and OPA's API are on loopback
+# anyway; this also closes OPA's diagnostic port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "metrino.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 4180
+---
+# The web OPA's authorization policy, which keeps its API read-only.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-opa-authz
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+data:
+  {{- (.Files.Glob "opa-web/authz.rego").AsConfig | nindent 2 }}
+{{- end }}

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.metabase.deployName }}
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "metrino.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: metabase
+  template:
+    metadata:
+      labels:
+        {{- include "metrino.labels" . | nindent 8 }}
+        app.kubernetes.io/component: metabase
+    spec:
+      containers:
+      - name: metabase
+        image: {{ .Values.metabase.image }}
+        env: 
+          - name: MB_DB_TYPE 
+            value: postgres
+          - name: MB_DB_DBNAME 
+            value: {{ .Values.postgresql.auth.database }}
+          - name: MB_DB_PORT 
+            value: "5432"
+          - name: MB_DB_USER
+            value: {{ .Values.postgresql.auth.username }}
+          - name: MB_DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "metrino.postgresql.secretName" . }}
+                key: password
+          - name: MB_DB_HOST
+            value: {{ printf "%s-postgresql" .Release.Name }}
+          - name: MB_PROMETHEUS_SERVER_PORT
+            value: "9191"
+        ports:
+        - containerPort: 3000
+        - containerPort: 9191
+      # Sends each query to Trino as the Metabase user who ran it. Listens on 127.0.0.1 (its default host) and
+      # metabase.reverseProxyPort, so only Metabase can reach it, and has no Service. Metabase's Trino connection
+      # must point here. It is set in Metabase, not here (see README.md).
+      - name: trino-reverse-proxy
+        {{- with .Values.trino.identityImage }}
+        image: {{ printf "%s/%s:%s" .registry .repository (required "trino.identityImage.tag is required (CI sets it)" .tag) | quote }}
+        {{- end }}
+        command: ["reverse-proxy"]
+        env:
+          - name: REVERSE_PROXY_PORT
+            value: {{ .Values.metabase.reverseProxyPort | quote }}
+          - name: TRINO_URL
+            value: {{ include "metrino.trino.url" . }}
+          - name: METABASE_URL
+            value: http://localhost:3000
+          - name: METABASE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.metabase.apiKeySecret.name }}
+                key: {{ .Values.metabase.apiKeySecret.key }}
+      {{- with .Values.metabase.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

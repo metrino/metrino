@@ -1,0 +1,40 @@
+$kind: http-request
+description: "An Administrator reads the admin page's document: the rules, the sync's status, warnings, and for each Trino catalog who can read each table and column, with the rule that decided it"
+url: localhost:8000/api/admin/rules
+method: GET
+headers:
+  - key: X-Forwarded-Email
+    value: "{{ADMIN_EMAIL}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Rules as Admin", function() {
+          pm.response.to.have.status(200);
+          const result = pm.response.json();
+          pm.expect(result.rulesFormat).to.eql('standard');
+          pm.expect(result.explained, 'OPA explained which rule decides each row').to.eql(true);
+          pm.expect(result.rules['example_jdbc.public.students.email']).to.eql(['Analysts']);
+          pm.expect(result.groups).to.eql(['Analysts', 'Teachers']);
+
+          // The union of Trino's catalogs, Metabase's connections and the rules.
+          const names = result.catalogs.map(c => c.name);
+          pm.expect(names).to.include('example_jdbc');
+          pm.expect(names).to.include('openapi');
+
+          // Decided by the web OPA for each group, as Trino's OPA decides: Teachers read the table, not its email.
+          const catalog = result.catalogs.find(c => c.name === 'example_jdbc');
+          const students = catalog.tables.find(t => t.schema === 'public' && t.name === 'students');
+          pm.expect(students, 'example_jdbc.public.students in tables').to.be.an('object');
+          pm.expect(students.access.Teachers.state).to.eql('read');
+          const email = students.columns.find(c => c.name === 'email');
+          pm.expect(email.access.Teachers.state).to.eql('masked');
+          pm.expect(email.decidedBy).to.eql('example_jdbc.public.students.email');
+
+          // openapi is a Trino catalog Metabase has no connection to.
+          const warning = result.warnings.find(w => w.kind === 'catalog-not-in-metabase' && w.catalog === 'openapi');
+          pm.expect(warning, 'catalog-not-in-metabase warning for openapi').to.be.an('object');
+
+          pm.expect(result.sync.files.group.syncedAt, 'group file synced').to.be.a('string').and.not.empty;
+      });
+    language: text/javascript
+order: 8000

@@ -1,0 +1,73 @@
+$kind: http-request
+description: "Runs once per role (admin, analyst, teacher), then queues every card on the dashboards that role can see"
+url: localhost:8080/api/dashboard
+method: GET
+auth:
+  type: apikey
+  credentials:
+    key: X-Metabase-Session
+    value: "{{METABASE_ROLE_TOKEN}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      const role = pm.environment.get('ROLE');
+      const token = pm.environment.get('METABASE_ROLE_TOKEN');
+
+      // Set by the collection permissions in metabase/dashboards/manifest.json
+      const expected_dashboards = {
+          admin: ['District at a glance', 'Enrollment and staffing explorer'],
+          analyst: ['Enrollment and staffing explorer'],
+          teacher: ['Enrollment and staffing explorer'],
+      };
+
+      const dashboards = pm.response.json();
+      pm.test(`${role} sees exactly their dashboards`, function() {
+          pm.response.to.have.status(200);
+          pm.response.to.be.json;
+          pm.expect(dashboards.map(db => db.name)).to.have.members(expected_dashboards[role]);
+      });
+
+      // Queue every card on every dashboard this role can see
+      const dashcards = [];
+      for (const dashboard of dashboards) {
+          const response = await pm.sendRequest({
+              url: `localhost:8080/api/dashboard/${dashboard.id}`,
+              header: { 'X-Metabase-Session': token },
+          });
+          pm.test(`${role} can open "${dashboard.name}"`, function() {
+              pm.expect(response.code).to.eq(200);
+          });
+
+          // Text and heading cards have no card_id, so there is nothing to query
+          response.json().dashcards
+              .filter(dashcard => dashcard.card_id !== null)
+              .forEach(dashcard => dashcards.push({
+                  dashboard_id: dashboard.id,
+                  dashboard_name: dashboard.name,
+                  id: dashcard.id,
+                  card_id: dashcard.card_id,
+                  name: dashcard.card.name,
+              }));
+      }
+
+      pm.test(`${role}'s dashboards have cards`, function() {
+          pm.expect(dashcards).to.not.be.empty;
+      });
+      pm.environment.set("DASHCARD_QUEUE", JSON.stringify(dashcards));
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      // A local variable, so every collection run starts again from the first role
+      const role_queue = JSON.parse(pm.variables.get('ROLE_QUEUE') || '["admin", "analyst", "teacher"]');
+      const role = role_queue.shift();
+      pm.variables.set('ROLE_QUEUE', JSON.stringify(role_queue));
+
+      // Logins in the Auth folder set METABASE_ADMIN_TOKEN, METABASE_ANALYST_TOKEN and METABASE_TEACHER_TOKEN
+      pm.environment.set('ROLE', role);
+      pm.environment.set('METABASE_ROLE_TOKEN', pm.environment.get(`METABASE_${role.toUpperCase()}_TOKEN`));
+
+      pm.test(`Check the ${role} token`, () => {
+          pm.expect(pm.environment.get('METABASE_ROLE_TOKEN')).to.be.a("string");
+      });
+    language: text/javascript
+order: 1000

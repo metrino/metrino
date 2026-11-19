@@ -1,0 +1,11 @@
+# Helm chart dependencies, downloaded by `helm dependency build ./helm`
+helm/charts/
+
+# Local secrets
+.env
+
+# macOS
+.DS_Store
+
+# Go build output (`go build` in web/)
+/web/web

@@ -1,0 +1,148 @@
+{{- if .Values.sampleConnectors.enabled }}
+{{- $image := .Values.sampleConnectors.image }}
+{{- $tag := required "sampleConnectors.image.tag is required when sampleConnectors.enabled is true (CI sets it)" $image.tag }}
+# The sample data sources (sample-connectors/). The Services are named like compose's hosts, so the catalogs in
+# trino/catalog work unchanged.
+#
+# The Postgres database for the example_jdbc catalog. Its data is synthetic and built into the image, so it
+# starts empty and reloads the data on every start: nothing here needs to persist.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-jdbc
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: example-jdbc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "metrino.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: example-jdbc
+  template:
+    metadata:
+      labels:
+        {{- include "metrino.labels" . | nindent 8 }}
+        app.kubernetes.io/component: example-jdbc
+    spec:
+      containers:
+      - name: postgres
+        image: {{ printf "%s/%s:%s" $image.registry $image.jdbcRepository $tag | quote }}
+        env:
+          # The same test credentials as compose and trino/catalog/example_jdbc.properties. Only Trino can
+          # connect (the NetworkPolicy below), and the data is synthetic.
+          - name: POSTGRES_USER
+            value: sample
+          - name: POSTGRES_PASSWORD
+            value: sample
+          - name: POSTGRES_DB
+            value: example_jdbc
+        ports:
+        - containerPort: 5432
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "sample", "-d", "example_jdbc"]
+          periodSeconds: 5
+        volumeMounts:
+          - name: data
+            mountPath: /var/lib/postgresql
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- with .Values.sampleConnectors.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-jdbc
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: example-jdbc
+spec:
+  selector:
+    {{- include "metrino.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: example-jdbc
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+# The HTTP server for the openapi catalog.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-http
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: example-http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "metrino.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: example-http
+  template:
+    metadata:
+      labels:
+        {{- include "metrino.labels" . | nindent 8 }}
+        app.kubernetes.io/component: example-http
+    spec:
+      containers:
+      - name: example-http
+        image: {{ printf "%s/%s:%s" $image.registry $image.httpRepository $tag | quote }}
+        ports:
+        - containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /openapi.json
+            port: 8000
+          periodSeconds: 5
+      {{- with .Values.sampleConnectors.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-http
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: example-http
+spec:
+  selector:
+    {{- include "metrino.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: example-http
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+---
+# Only Trino's pods may reach the sample data sources.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sample-connectors
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name | quote }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [example-jdbc, example-http]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trino
+              app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
