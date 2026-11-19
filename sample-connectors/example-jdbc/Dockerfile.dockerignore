@@ -1,0 +1,5 @@
+# The build context is sample-connectors/; the image only needs the SQL and the two data folders.
+*
+!example-jdbc/database.sql
+!example-jdbc/data
+!example-http/data

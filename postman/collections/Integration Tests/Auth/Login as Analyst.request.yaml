@@ -1,0 +1,30 @@
+$kind: http-request
+description: ""
+url: http://localhost:8080/api/session
+method: POST
+body:
+  type: json
+  content: |-
+    {
+        "username":"{{ANALYST_EMAIL}}",
+        "password":"{{ANALYST_PASS}}",
+        "remember":false
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Login with analyst credentials returns token", function() {
+          pm.response.to.have.status(200);
+          const token = pm.response.json().id;
+          pm.expect(token).to.lengthOf(36);
+          pm.environment.set('METABASE_ANALYST_TOKEN', token);
+      }) 
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      pm.test("Check the credentials", () => {
+          pm.expect(pm.environment.get('ANALYST_EMAIL')).to.be.a("string");
+          pm.expect(pm.environment.get('ANALYST_PASS')).to.be.a("string");
+      });
+    language: text/javascript
+order: 3000

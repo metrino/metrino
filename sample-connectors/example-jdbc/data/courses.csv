@@ -1,0 +1,74 @@
+course_id,course_name,discipline,academic_type
+1ce8d8c0-53bd-4de2-bf55-114658e5b352,English 9,English,core
+a37296d3-f6b3-4a0f-8885-26a77ca8668a,English 10,English,core
+ca7e3df6-b9ae-48b9-a04a-d3a54170d002,English 11,English,core
+793272aa-fdf9-4e54-902a-543a28a2b200,English 12,English,core
+b920c803-0733-48e2-a058-09d23ec70828,AP English Language and Composition,English,AP
+a301c872-4ff0-41ca-9e2a-3d6e25cc2138,AP English Literature and Composition,English,AP
+ba899da0-39b3-453b-b1d8-d8ba753e3ec8,DE English Composition I,English,DE
+a6757aaa-1cba-4b5f-8060-9e8d7c8948dd,DE English Composition II,English,DE
+b08e36bd-3765-483a-9c0a-2b2fe7feb19b,DE World Literature,English,DE
+6715be99-3564-4ce5-9a35-7dc0233c8e8c,World History I,History and Social Sciences,core
+343fb39c-e726-47b3-b116-2a552b957624,World History II,History and Social Sciences,core
+3a6540d9-ffb4-461c-af5e-5f6092e63f3e,United States History,History and Social Sciences,core
+38627e2b-75fd-427e-953a-90eb9c11c9a8,Virginia and United States Government,History and Social Sciences,core
+f12c4d9d-f65a-4eb6-bf71-bf209267d2d7,Psychology,History and Social Sciences,core
+ed6b1a4f-182d-4596-b3c7-826b44f4871e,AP World History,History and Social Sciences,AP
+e358cf17-0a13-444e-b870-bc907b123d8f,AP United States History,History and Social Sciences,AP
+0a4c2090-465a-43e3-a985-750d3ff72971,AP United States Government and Politics,History and Social Sciences,AP
+1ad0c1da-13d2-4f42-8701-f583f22f9b9e,AP European History,History and Social Sciences,AP
+828a127e-2a2e-48f6-98a4-149f2f93eb0e,DE United States History,History and Social Sciences,DE
+5795b039-7744-4209-af0f-f4281022dadf,Algebra I,Mathematics,core
+a5035355-9312-49ac-85b7-3aaab29d83ff,Geometry,Mathematics,core
+dfb19de8-6b05-445a-b0dd-43c754589c8a,Algebra II,Mathematics,core
+4de72740-6725-4cd2-ba25-a4b00f8cda6c,Trigonometry and Functions,Mathematics,core
+3915373f-d62c-4313-9181-92df39fff844,Pre-Calculus,Mathematics,core
+adb22f8f-14e1-4503-bf73-b27b80eb3caa,AP Calculus AB,Mathematics,AP
+bd2decf0-b93f-4858-8d95-66a0ea987891,AP Calculus BC,Mathematics,AP
+0476f958-0034-4603-886d-80833ea84e5a,AP Statistics,Mathematics,AP
+e228a011-7e09-4890-ac98-3bdf3a348119,DE Statistics,Mathematics,DE
+afd0848d-95b0-438e-9ee9-a9962eaac58d,DE College Algebra,Mathematics,DE
+d6c9d111-950a-42a5-a53d-3184dc88196f,Earth Science,Laboratory Sciences,core
+82a97ffe-5478-4d70-bf68-98165ae6ec58,Biology,Laboratory Sciences,core
+70b86f7f-1165-4eba-94ad-7f8a1449d88a,Chemistry,Laboratory Sciences,core
+05858984-f53d-4436-b3fe-3b6f639b2ab9,Physics,Laboratory Sciences,core
+73ae49f7-2e8a-4561-84de-c715816c79fa,Anatomy and Physiology,Laboratory Sciences,core
+32b0e4fc-27bd-4cb9-af66-bf219aa69f1a,AP Biology,Laboratory Sciences,AP
+0514c1c3-30b7-4466-991a-cf703138c583,AP Chemistry,Laboratory Sciences,AP
+7692dfe4-3176-4609-ac64-af72936b3da9,AP Physics 1,Laboratory Sciences,AP
+11dcec63-92f0-4a23-a008-2eae1fda5c03,AP Environmental Science,Laboratory Sciences,AP
+d3932eee-3864-42e1-b320-a4744ea4eab8,DE Biology,Laboratory Sciences,DE
+961a854c-bbcd-43eb-98ef-c9ef0b87fc1d,Health and Physical Education 9,Health and Physical Education,core
+cfd37838-f90a-405a-a28d-389845fd43fb,Health and Physical Education 10,Health and Physical Education,core
+1b348719-a0a0-4d33-b5ea-9e08779c1f43,Personal Fitness and Wellness,Health and Physical Education,core
+27247bd0-baa0-4172-8e6e-146fdc95bf72,Weight Training,Health and Physical Education,core
+c624e4a1-a2ac-4858-b439-ac6f7348aea3,Team Sports,Health and Physical Education,core
+497c15ec-2d29-4e08-afee-13730b55e599,Driver Education,Health and Physical Education,core
+adf510a7-1c6a-4044-a13d-e16cecd6a01a,Art I,Fine Arts or CTE,core
+0050afc1-63b1-4b1f-bd06-a82d6e0bc7a6,Art II,Fine Arts or CTE,core
+6c1169d0-b514-4e2d-b78c-ece050cdcd2d,AP Studio Art,Fine Arts or CTE,AP
+ab38d5eb-0fe6-423e-8647-e35c06bd3c0b,Band,Fine Arts or CTE,core
+c68f8362-5a41-4d48-a6ed-8eac94ea0efd,Orchestra,Fine Arts or CTE,core
+0401d2d2-d442-4b44-82b1-9c24fdb331b2,Concert Choir,Fine Arts or CTE,core
+58b8433e-cf3a-4acf-81bc-631ab34ee7d4,Theatre Arts,Fine Arts or CTE,core
+eaca5d33-d0d4-4821-9db9-f105dae054d3,Culinary Arts I,Fine Arts or CTE,core
+00fbb9d6-4e26-4ece-aff9-f6e647906139,Introduction to Computer Science,Fine Arts or CTE,core
+fea3ec60-a0bd-4d38-aa45-55c7299b6bc5,AP Computer Science A,Fine Arts or CTE,AP
+21818424-e5d2-42f8-ac32-3b7a8262dee3,DE Computer Information Systems,Fine Arts or CTE,DE
+174115a2-c73a-4191-b2ae-e99e482b3d44,Welding Technology,Fine Arts or CTE,core
+64812ad3-4a9b-456c-b308-5c3268b673b1,Automotive Technology,Fine Arts or CTE,core
+fba57176-eeae-4a0b-a8c9-52ed23f5e415,Cosmetology,Fine Arts or CTE,core
+3a3d3800-4ffe-41a2-b219-7d42f667a195,Economics and Personal Finance,Economics or Personal Finance,core
+5caae5bc-5c12-45a3-96ce-a0859932c12f,AP Macroeconomics,Economics or Personal Finance,AP
+b5003def-d6fe-4ae2-9295-a18b84439966,AP Microeconomics,Economics or Personal Finance,AP
+ad2b188e-d28a-400b-b6c1-62dea3b0b01c,DE Introduction to Economics,Economics or Personal Finance,DE
+574f2126-821c-4f34-9881-0d81d7105ad9,Creative Writing,Electives,core
+bf34cdd1-bd0e-4e53-a6f0-4387a088da93,Public Speaking,Electives,core
+d70cc84b-0904-4b5f-a1dd-d0aa1dbc0d4f,Journalism and Yearbook,Electives,core
+438c31b0-4984-4f5c-a7c5-146a7dfae5b4,Spanish I,Electives,core
+88d68731-2495-4d9c-b698-3e5fde110334,Spanish II,Electives,core
+80be863a-479e-429e-9919-1e72ef4ff91a,Spanish III,Electives,core
+3d76a1e4-dc43-4932-afee-06f9eac872fe,AP Spanish Language and Culture,Electives,AP
+6d068c64-6db4-4e54-bde6-1ae8bd2865d5,French I,Electives,core
+982a5890-d3f8-4429-998f-1d046c728f5a,French II,Electives,core
+28000591-0dc1-4692-9a9d-665582f05e83,DE Spanish Conversation,Electives,DE

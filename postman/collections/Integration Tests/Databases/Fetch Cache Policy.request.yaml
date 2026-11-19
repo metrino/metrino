@@ -1,0 +1,29 @@
+$kind: http-request
+description: "Metabase's result cache is keyed by the query, not the user, so caching must stay off. OSS has a single root policy, which covers the trino connection."
+url: localhost:8080/api/cache
+method: GET
+auth:
+  type: apikey
+  credentials:
+    key: X-Metabase-Session
+    value: "{{METABASE_ADMIN_TOKEN}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Result caching is off", function() {
+          pm.response.to.have.status(200);
+          pm.response.to.be.json;
+
+          const policies = pm.response.json().data;
+          pm.expect(policies).to.have.lengthOf(1);
+          pm.expect(policies[0].model).to.eq('root');
+          pm.expect(policies[0].strategy.type).to.eq('nocache');
+      });
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      pm.test("Check the admin token", () => {
+          pm.expect(pm.environment.get('METABASE_ADMIN_TOKEN')).to.be.a("string");
+      });
+    language: text/javascript
+order: 2000

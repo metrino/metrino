@@ -1,0 +1,5 @@
+[
+  { "email": "admin@example.com", "first_name": "admin", "last_name": "admin", "groups": ["Administrators"] },
+  { "email": "analyst@example.com", "first_name": "analyst", "last_name": "analyst", "groups": ["Analysts"] },
+  { "email": "teacher@example.com", "first_name": "teacher", "last_name": "teacher", "groups": ["Teachers"] }
+]

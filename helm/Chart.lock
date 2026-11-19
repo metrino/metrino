@@ -1,0 +1,12 @@
+dependencies:
+- name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 18.11.3
+- name: trino
+  repository: https://trinodb.github.io/charts
+  version: 1.45.0
+- name: prometheus
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 29.40.3
+digest: sha256:c6c4b30c077871772171cdd56a24f9dea6bd30cca02ae8995a576c19eb46ba66
+generated: "2026-11-01T15:07:59.32509-05:00"

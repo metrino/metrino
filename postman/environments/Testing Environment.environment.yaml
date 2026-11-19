@@ -1,0 +1,23 @@
+name: Testing Environment
+values:
+  - key: ADMIN_EMAIL
+    value: admin@example.com
+  - key: ADMIN_PASS
+    value: q1q1q1q1
+  - key: ANALYST_EMAIL
+    value: analyst@example.com
+  - key: ANALYST_PASS
+    value: q1q1q1q1
+  - key: TEACHER_EMAIL
+    value: teacher@example.com
+  - key: TEACHER_PASS
+    value: q1q1q1q1
+  - key: METABASE_ADMIN_TOKEN
+    value: ''
+    disabled: true
+  - key: METABASE_ANALYST_TOKEN
+    value: ''
+    disabled: true
+  - key: METABASE_TEACHER_TOKEN
+    value: ''
+    disabled: true

@@ -1,0 +1,30 @@
+$kind: http-request
+description: ""
+url: localhost:8080/api/database
+method: GET
+auth:
+  type: apikey
+  credentials:
+    key: X-Metabase-Session
+    value: "{{METABASE_ADMIN_TOKEN}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Database list contains trino", function() {
+          pm.response.to.have.status(200);
+          pm.response.to.be.json;
+
+          const databases = pm.response.json().data;
+          const trino = databases.find(db => db.name === 'trino');
+          pm.expect(trino).to.not.be.undefined;
+          pm.expect(trino.details).to.not.be.undefined;
+          pm.expect(trino.details.catalog).to.eq('example_jdbc');
+      }) 
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      pm.test("Check the admin token", () => {
+          pm.expect(pm.environment.get('METABASE_ADMIN_TOKEN')).to.be.a("string");
+      });
+    language: text/javascript
+order: 1000

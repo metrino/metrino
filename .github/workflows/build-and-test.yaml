@@ -1,0 +1,54 @@
+name: Build and Run Postman Integration Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # Tests that don't need the stack: the OPA policy with the sample rules, the web OPA's authorization policy,
+  # and the Go tests for the reverse proxy and Metabase sync (trino/identity) and the web server (web).
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+
+        # The policy with the sample rules compose uses, then the web OPA's authorization policy.
+        - name: Run the OPA policy tests
+          run: |
+            docker run --rm -v "$PWD/helm/opa:/policy:ro" -v "$PWD/opa:/rules:ro" \
+              openpolicyagent/opa:1.21.2-static test /policy /rules -v
+            docker run --rm -v "$PWD/helm/opa-web:/authz:ro" openpolicyagent/opa:1.21.2-static test /authz -v
+
+        # Fails on Go that gofmt would change, listing the files, then runs the tests.
+        - name: Run the Go tests
+          run: |
+            for module in trino/identity web; do
+              docker run --rm -v "$PWD/$module:/src" -w /src golang:1.27.3 sh -c \
+                'unformatted=$(gofmt -l .); [ -z "$unformatted" ] || { echo "Not gofmt-formatted:"; echo "$unformatted"; exit 1; }; go test ./...'
+            done
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+          with:
+              fetch-depth: 0
+
+        - name: Run Docker compose
+          run: docker compose up --wait --wait-timeout 90
+
+        # --wait only waits for metabase-setup to start; the tests need its dashboards to exist
+        - name: Wait for Metabase setup to finish
+          run: |
+            status=$(timeout 300 docker wait metabase-setup)
+            docker compose logs metabase-setup
+            test "$status" -eq 0
+
+        - name: Install Postman CLI
+          run: |
+            curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
+        - name: Run API tests
+          run: |
+            postman collection run "./postman/collections/Integration Tests" \
+            -e postman/environments/Testing\ Environment.environment.yaml 

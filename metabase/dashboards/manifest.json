@@ -1,0 +1,269 @@
+{
+  "database": "trino",
+  "collections": [
+    {
+      "key": "admin",
+      "name": "Admin Dashboards",
+      "description": "District-level overview for ACPS administrators. Aggregates only; no individual student records.",
+      "all_users": "none"
+    },
+    {
+      "key": "analyst",
+      "name": "Analyst Dashboards",
+      "description": "Enrollment and staffing breakdowns for ACPS analysts.",
+      "all_users": "read"
+    },
+    {
+      "key": "models",
+      "name": "Data Models",
+      "description": "Curated datasets without sensitive columns. Start new questions from these.",
+      "all_users": "read"
+    }
+  ],
+  "models": [
+    {
+      "name": "Students",
+      "collection": "models",
+      "sql": "models/students.sql",
+      "description": "One row per student, without names or email addresses."
+    },
+    {
+      "name": "Schools",
+      "collection": "models",
+      "sql": "models/schools.sql",
+      "description": "One row per school with type, grade range and public contact details."
+    },
+    {
+      "name": "Staff",
+      "collection": "models",
+      "sql": "models/staff.sql",
+      "description": "One row per staff member with school and department, without names or contact details."
+    },
+    {
+      "name": "Departments",
+      "collection": "models",
+      "sql": "models/departments.sql",
+      "description": "District departments."
+    },
+    {
+      "name": "Courses",
+      "collection": "models",
+      "sql": "models/courses.sql",
+      "description": "Course catalog with discipline and academic type."
+    },
+    {
+      "name": "Student courses",
+      "collection": "models",
+      "sql": "models/student_courses.sql",
+      "description": "Course enrollments with status and grade."
+    },
+    {
+      "name": "Enrollment",
+      "collection": "models",
+      "sql": "models/enrollment.sql",
+      "description": "Students joined with their school: type, enrollment date and expected graduation."
+    }
+  ],
+  "groups": [
+    {
+      "name": "Analysts"
+    }
+  ],
+  "dashboards": [
+    {
+      "name": "District at a glance",
+      "collection": "admin",
+      "description": "Headline numbers, enrollment trend and staffing for the district.",
+      "cards": [
+        {
+          "name": "Schools",
+          "sql": "admin/schools_count.sql",
+          "display": "scalar",
+          "row": 0,
+          "col": 0,
+          "size_x": 8,
+          "size_y": 3
+        },
+        {
+          "name": "Students",
+          "sql": "admin/students_count.sql",
+          "display": "scalar",
+          "row": 0,
+          "col": 8,
+          "size_x": 8,
+          "size_y": 3
+        },
+        {
+          "name": "Staff",
+          "sql": "admin/staff_count.sql",
+          "display": "scalar",
+          "row": 0,
+          "col": 16,
+          "size_x": 8,
+          "size_y": 3
+        },
+        {
+          "name": "Top 10 schools by students",
+          "sql": "admin/students_per_school.sql",
+          "display": "row",
+          "row": 3,
+          "col": 0,
+          "size_x": 12,
+          "size_y": 9,
+          "settings": {
+            "graph.dimensions": [
+              "school"
+            ],
+            "graph.metrics": [
+              "students"
+            ]
+          }
+        },
+        {
+          "name": "Staff per department",
+          "sql": "admin/staff_per_department.sql",
+          "display": "row",
+          "row": 3,
+          "col": 12,
+          "size_x": 12,
+          "size_y": 9,
+          "settings": {
+            "graph.dimensions": [
+              "department"
+            ],
+            "graph.metrics": [
+              "staff"
+            ]
+          }
+        },
+        {
+          "name": "Enrollment by year",
+          "sql": "admin/enrollment_by_year.sql",
+          "display": "line",
+          "row": 12,
+          "col": 0,
+          "size_x": 12,
+          "size_y": 6,
+          "settings": {
+            "graph.dimensions": [
+              "enrollment_year"
+            ],
+            "graph.metrics": [
+              "students"
+            ]
+          }
+        },
+        {
+          "name": "Students by expected graduation year",
+          "sql": "admin/graduation_year.sql",
+          "display": "bar",
+          "row": 12,
+          "col": 12,
+          "size_x": 12,
+          "size_y": 6,
+          "settings": {
+            "graph.dimensions": [
+              "graduation_year"
+            ],
+            "graph.metrics": [
+              "students"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Enrollment and staffing explorer",
+      "collection": "analyst",
+      "description": "Student enrollment by school type and year, staffing load, and a school directory.",
+      "parameters": [
+        {
+          "id": "school",
+          "name": "School",
+          "type": "string/=",
+          "values_from_model": "Schools",
+          "values_column": "school_name"
+        },
+        {
+          "id": "school_type",
+          "name": "School type",
+          "type": "string/=",
+          "values_from_model": "Schools",
+          "values_column": "school_type"
+        }
+      ],
+      "cards": [
+        {
+          "name": "Students by school type",
+          "sql": "analyst/students_by_school_type.sql",
+          "display": "bar",
+          "row": 0,
+          "col": 0,
+          "size_x": 12,
+          "size_y": 7,
+          "settings": {
+            "graph.dimensions": [
+              "school_type"
+            ],
+            "graph.metrics": [
+              "students"
+            ]
+          },
+          "filters": [
+            "school",
+            "school_type"
+          ]
+        },
+        {
+          "name": "Enrollment by year and school type",
+          "sql": "analyst/enrollment_by_year_and_type.sql",
+          "display": "bar",
+          "settings": {
+            "graph.dimensions": [
+              "enrollment_year",
+              "school_type"
+            ],
+            "graph.metrics": [
+              "students"
+            ],
+            "stackable.stack_type": "stacked"
+          },
+          "row": 0,
+          "col": 12,
+          "size_x": 12,
+          "size_y": 7,
+          "filters": [
+            "school",
+            "school_type"
+          ]
+        },
+        {
+          "name": "Students per staff member by school",
+          "sql": "analyst/students_per_staff.sql",
+          "display": "table",
+          "row": 7,
+          "col": 0,
+          "size_x": 24,
+          "size_y": 9,
+          "filters": [
+            "school",
+            "school_type"
+          ]
+        },
+        {
+          "name": "School directory",
+          "sql": "analyst/school_directory.sql",
+          "display": "table",
+          "row": 16,
+          "col": 0,
+          "size_x": 24,
+          "size_y": 9,
+          "filters": [
+            "school",
+            "school_type"
+          ]
+        }
+      ]
+    }
+  ]
+}

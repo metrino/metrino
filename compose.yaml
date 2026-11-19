@@ -1,0 +1,276 @@
+services:
+  metabase:
+    image: metabase/metabase:v0.63.19.2
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${MB_DB_DBNAME:-myDatabase}
+      MB_DB_PORT: "5432"
+      MB_DB_USER: ${MB_DB_USER:-myUsername}
+      MB_DB_PASS: ${MB_DB_PASS:-myPassword}
+      MB_DB_HOST: database
+      # Encrypts saved data-source credentials in the app DB. Local development only; not a real secret.
+      MB_ENCRYPTION_SECRET_KEY: ${MB_ENCRYPTION_SECRET_KEY:-local-dev-only-encryption-key-0123456789}
+      # The settings below are documented at:
+      # https://www.metabase.com/docs/latest/configuring-metabase/environment-variables
+      # Base URL Metabase uses for links it generates; matches the host port below.
+      MB_SITE_URL: http://localhost:8080
+      # Don't send anonymous usage data from dev/test instances.
+      MB_ANON_TRACKING_ENABLED: "false"
+      # Versions are pinned in this file; upgrades are deliberate, so skip "update available" checks.
+      MB_CHECK_FOR_UPDATES: "false"
+      # Prevent public links to dashboards/questions, which will hold student data.
+      MB_ENABLE_PUBLIC_SHARING: "false"
+      # Don't create Metabase's "Examples" collection of sample dashboards.
+      MB_LOAD_SAMPLE_CONTENT: "false"
+      # Run queries in UTC so results are the same on every developer's machine.
+      MB_REPORT_TIMEZONE: UTC
+      # Same for the Metabase server process (JVM) itself.
+      JAVA_TIMEZONE: UTC
+      MB_PROMETHEUS_SERVER_PORT: 9191
+    ports:
+      - 8080:3000
+    depends_on:
+      trino:
+        condition: service_started
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -I http://localhost:3000/api/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  metabase-setup:
+    build: metabase
+    container_name: metabase-setup
+    depends_on:
+      metabase:
+        condition: service_healthy
+      # Setup points Metabase's Trino connection at the proxy.
+      trino-reverse-proxy:
+        condition: service_started
+    volumes:
+      - ./metabase/setup.sh:/setup.sh
+      - ./metabase/dashboards:/dashboards:ro
+      - ./metabase/test-users.json:/test-users.json:ro
+      - metabase-api-key:/shared/key
+      # Setup waits until the Metabase sync has written the test users' groups, before the first queries.
+      - trino-groups:/groups:ro
+    command: sh /setup.sh
+    environment:
+      - ADMIN_EMAIL=admin@example.com
+      - ADMIN_PASS=q1q1q1q1
+      # The other test users and their groups. Local development only; not a real secret.
+      - TEST_USERS=/test-users.json
+      - TEST_USER_PASS=q1q1q1q1
+      - CATALOG=example_jdbc
+      - METABASE_KEY_FILE=/shared/key/metabase-api-key
+      # Metabase reaches Trino through the proxy so queries run as the signed-in user.
+      - TRINO_HOST=${TRINO_HOST:-trino-reverse-proxy}
+      - TRINO_PORT=${TRINO_PORT:-9090}
+  database:
+    image: postgres:16
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: ${MB_DB_USER:-myUsername}
+      POSTGRES_PASSWORD: ${MB_DB_PASS:-myPassword}
+      POSTGRES_DB: ${MB_DB_DBNAME:-myDatabase}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${MB_DB_USER:-myUsername} -d ${MB_DB_DBNAME:-myDatabase}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  trino:
+    image: trinodb/trino:484
+    ports:
+      - 8090:8080
+    volumes:
+      # The sample catalogs. The image has none of its own beyond Trino's defaults, which this hides.
+      - ./trino/catalog:/etc/trino/catalog:ro
+      - trino-openapi-plugin:/usr/lib/trino/plugin/openapi:ro
+      - ./trino/access-control.properties:/etc/trino/access-control.properties:ro
+      - ./trino/group-provider.properties:/etc/trino/group-provider.properties:ro
+      # The group file written by metabase-sync.
+      - trino-groups:/etc/trino-groups:ro
+    depends_on:
+      example-jdbc:
+        condition: service_healthy
+      trino-plugins:
+        condition: service_completed_successfully
+      # Trino asks OPA about every query and fails closed without it.
+      opa:
+        condition: service_started
+      # Trino won't start without the group file.
+      metabase-sync:
+        condition: service_healthy
+
+  # Writes Trino's group file from Metabase's users and groups, and the web admin page's schema file from the
+  # Trino tables Metabase knows (trino/identity/cmd/metabase-sync). Every 5 seconds rather than Helm's 30, so
+  # setup doesn't wait long for the test users' groups. Until setup has created the API key, its runs fail and
+  # the group file stays empty.
+  metabase-sync:
+    build:
+      context: trino/identity
+    command: ["metabase-sync"]
+    environment:
+      METABASE_URL: http://metabase:3000
+      METABASE_KEY_FILE: /shared/key/metabase-api-key
+      GROUP_FILE: /groups/group.txt
+      # For the web server's admin page (in Kubernetes, only the web pod's sync writes it).
+      SCHEMA_FILE: /groups/schema.json
+      # How the syncs are going, for the same page.
+      STATUS_FILE: /groups/status.json
+      # Metabase's Trino connections that use these are the ones the page lists tables for.
+      TRINO_PROXY_ADDRESSES: trino-reverse-proxy:${REVERSE_PROXY_PORT:-9090}
+      SYNC_INTERVAL: 5s
+    volumes:
+      - trino-groups:/groups
+      - metabase-api-key:/shared/key:ro
+    # Healthy once the (possibly empty) file exists, which it writes before its first run.
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /groups/group.txt"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  # Downloads the openapi connector plugin, which the openapi catalog uses, into a volume Trino mounts.
+  # Plugins live outside the Trino image, so the image stays a plain copy of official Trino. The download
+  # is pinned by its sha256: a changed or broken file fails this service, and Trino doesn't start.
+  trino-plugins:
+    image: alpine:3.24.2
+    environment:
+      PLUGIN_URL: https://github.com/nineinchnick/trino-openapi/releases/download/v2.1/trino-openapi-2.1.zip
+      PLUGIN_SHA256: a2b27bffde6f9f1416d30daa0ae8d5baecb2490bf08f86711dcc99af35936b85
+    volumes:
+      - trino-openapi-plugin:/plugin
+    command:
+      - sh
+      - -euc
+      - |
+        if [ "$$(cat /plugin/.sha256 2>/dev/null)" = "$$PLUGIN_SHA256" ]; then
+          echo "plugin already downloaded"
+          exit 0
+        fi
+        wget -qO /tmp/plugin.zip "$$PLUGIN_URL"
+        echo "$$PLUGIN_SHA256  /tmp/plugin.zip" | sha256sum -c -
+        rm -rf /plugin/* /plugin/.sha256
+        unzip -jq /tmp/plugin.zip -d /plugin
+        echo "$$PLUGIN_SHA256" > /plugin/.sha256
+
+  opa:
+    image: openpolicyagent/opa:1.21.2-static # Same image as the Trino Helm chart's OPA sidecar.
+    ports:
+      - 8181:8181
+    volumes:
+      # The policy the Helm chart deploys, and the sample rules for the sample data.
+      - ./helm/opa:/policy:ro
+      - ./opa:/rules:ro
+    # Console decision logs print each decision's input and result to `docker compose logs opa`, for
+    # debugging access decisions and checking the groups Trino sends. Local development only.
+    command: run --server --addr=0.0.0.0:8181 --set=decision_logs.console=true /policy /rules
+
+  example-http:
+    build: ./sample-connectors/example-http
+    expose:
+      - 8000
+
+  # Synthetic ACPS data. courses/student_courses come from the example-jdbc CSVs and
+  # schools/students/staff/departments from the example-http CSVs (see database.sql).
+  example-jdbc:
+    build:
+      context: ./sample-connectors
+      dockerfile: example-jdbc/Dockerfile
+    container_name: example_postgresdb
+    environment:
+      POSTGRES_USER: sample
+      POSTGRES_PASSWORD: sample
+      POSTGRES_DB: example_jdbc
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sample -d example_jdbc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Sends each Metabase query to Trino as the Metabase user who ran it (X-Trino-User).
+  trino-reverse-proxy:
+    build:
+      context: trino/identity
+    command: ["reverse-proxy"]
+    depends_on:
+      trino:
+        condition: service_started
+    environment:
+      TRINO_URL: ${TRINO_URL:-http://trino:8080}
+      METABASE_URL: ${METABASE_URL:-http://metabase:3000}
+      # Empty means read the key that metabase-setup writes to METABASE_KEY_FILE.
+      METABASE_API_KEY: ${METABASE_API_KEY:-}
+      # Metabase is a separate container here. In Kubernetes the sidecar keeps the 127.0.0.1 default.
+      REVERSE_PROXY_HOST: 0.0.0.0
+      REVERSE_PROXY_PORT: ${REVERSE_PROXY_PORT:-9090}
+      METABASE_KEY_FILE: /shared/key/metabase-api-key
+    volumes:
+      - metabase-api-key:/shared/key
+  prometheus:
+    image: prom/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prom-data:/prometheus
+
+
+  # The docs and admin website (web/). Kubernetes puts oauth2-proxy in front of it; here there is none, so
+  # send X-Forwarded-Email yourself (the tests do, and a browser extension can).
+  web:
+    build: ./web
+    environment:
+      # Kubernetes keeps the 127.0.0.1 default, which is what makes the email header trustworthy there.
+      WEB_HOST: 0.0.0.0
+      GROUP_FILE: /groups/group.txt
+      OPA_URL: http://web-opa:8181
+      METABASE_LINK_URL: http://localhost:8080
+      PROMETHEUS_LINK_URL: http://localhost:9090
+      SCHEMA_FILE: /groups/schema.json
+      STATUS_FILE: /groups/status.json
+      # The names of the files in trino/catalog; keep them in step. The properties
+      # files hold passwords, so the web server only gets the names.
+      TRINO_CATALOGS: example_jdbc,openapi
+    ports:
+      # Localhost only, since without oauth2-proxy anyone who reaches the port can send any X-Forwarded-Email.
+      - 127.0.0.1:8000:8000
+    volumes:
+      - trino-groups:/groups:ro
+    depends_on:
+      metabase-sync:
+        condition: service_healthy
+      web-opa:
+        condition: service_started
+
+  # The web server's own OPA, run as in Kubernetes: the same policy and rules as Trino's, and a read-only API.
+  web-opa:
+    image: openpolicyagent/opa:1.21.2-static
+    ports:
+      - 8182:8181 # Only for the test that it refuses writes.
+    volumes:
+      - ./helm/opa:/policy:ro
+      - ./opa:/rules:ro
+      - ./helm/opa-web:/authz:ro
+    command: run --server --addr=0.0.0.0:8181 --authorization=basic /policy /rules /authz
+
+volumes:
+  data_sql:
+  metabase-api-key:
+  trino-openapi-plugin:
+  trino-groups:
+  prom-data:

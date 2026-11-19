@@ -1,0 +1,15 @@
+$kind: http-request
+description: "The web OPA's API is read-only: a policy upload is refused with 401 (this is the port compose publishes only for this test)"
+url: localhost:8182/v1/policies/test
+method: PUT
+body:
+  type: text
+  content: package test
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Web OPA refuses writes", function() {
+          pm.response.to.have.status(401);
+      });
+    language: text/javascript
+order: 9000

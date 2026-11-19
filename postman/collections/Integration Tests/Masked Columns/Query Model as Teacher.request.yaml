@@ -1,0 +1,57 @@
+$kind: http-request
+description: "The access rules (opa/rules.rego) hide student_courses.grade from Teachers, so it comes back as NULL"
+url: localhost:8080/api/card/{{MODEL_ID}}/query
+method: POST
+auth:
+  type: apikey
+  credentials:
+    key: X-Metabase-Session
+    value: "{{METABASE_TEACHER_TOKEN}}"
+body:
+  type: json
+  content: |-
+    {
+        "parameters": []
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Student courses model returns data for teacher", function() {
+          pm.response.to.be.json;
+
+          // Check the error first, so a failed query shows Trino's message (e.g. Access Denied)
+          const result = pm.response.json();
+          pm.expect(result.error, result.error).to.not.exist;
+          pm.expect(result.status).to.eq('completed');
+
+          // Metabase answers queries with 202 Accepted, even when they succeed
+          pm.response.to.have.status(202);
+          pm.expect(result.row_count).to.be.above(0);
+      });
+
+      // A failed query has no data, so the checks below fail instead of the script
+      const data = pm.response.json().data || { cols: [], rows: [] };
+      const column_names = data.cols.map(col => col.name);
+      const distinct_values = name => [...new Set(data.rows.map(row => row[column_names.indexOf(name)]))];
+
+      pm.test("Grades are hidden from teacher", function() {
+          pm.expect(column_names).to.include('grade');
+          pm.expect(distinct_values('grade')).to.eql([null]);
+      });
+
+      pm.test("Statuses are visible to teacher", function() {
+          pm.expect(column_names).to.include('status');
+          pm.expect(distinct_values('status').filter(value => value !== null)).to.not.be.empty;
+      });
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      pm.test("Check the teacher token", () => {
+          pm.expect(pm.environment.get('METABASE_TEACHER_TOKEN')).to.be.a("string");
+      });
+
+      pm.test("Check the model", () => {
+          pm.expect(pm.environment.get('MODEL_ID')).to.not.be.undefined;
+      });
+    language: text/javascript
+order: 2000

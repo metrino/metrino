@@ -1,0 +1,68 @@
+$kind: http-request
+description: "Runs once per queued card, looping until DASHCARD_QUEUE is empty, then moves on to the next role"
+url: localhost:8080/api/dashboard/{{DASHBOARD_ID}}/dashcard/{{DASHCARD_ID}}/card/{{CARD_ID}}/query
+method: POST
+auth:
+  type: apikey
+  credentials:
+    key: X-Metabase-Session
+    value: "{{METABASE_ROLE_TOKEN}}"
+body:
+  type: json
+  content: |-
+    {
+        "parameters": []
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const role = pm.environment.get('ROLE');
+      const card_name = pm.environment.get('CARD_NAME');
+      const dashboard_name = pm.environment.get('DASHBOARD_NAME');
+      pm.test(`${role}: card "${card_name}" on "${dashboard_name}" returns data`, function() {
+          pm.response.to.be.json;
+
+          // Check the error first, so a failed query shows Trino's message (e.g. Access Denied)
+          const result = pm.response.json();
+          pm.expect(result.error, result.error).to.be.undefined;
+          pm.expect(result.status).to.eq('completed');
+
+          // Metabase answers queries with 202 Accepted, even when they succeed
+          pm.response.to.have.status(202);
+          pm.expect(result.row_count).to.be.above(0);
+      });
+
+      // Loop back to this request until every card has been queried, then fetch the next role's dashboards
+      const queue = JSON.parse(pm.environment.get('DASHCARD_QUEUE'));
+      const role_queue = JSON.parse(pm.variables.get('ROLE_QUEUE') || '[]');
+      if (queue.length > 0) {
+          pm.execution.setNextRequest('Query Dashboard Card');
+      } else if (role_queue.length > 0) {
+          pm.execution.setNextRequest('Fetch Dashboards');
+      }
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      pm.test("Check the role token", () => {
+          pm.expect(pm.environment.get('METABASE_ROLE_TOKEN')).to.be.a("string");
+      });
+
+      pm.test("Check the dashboard cards", () => {
+          pm.expect(pm.environment.get('DASHCARD_QUEUE')).to.be.a("string");
+      });
+
+      // Take the next card off the queue left by "Fetch Dashboards"
+      const queue = JSON.parse(pm.environment.get('DASHCARD_QUEUE') || '[]');
+      const dashcard = queue.shift();
+      if (dashcard === undefined) {
+          pm.execution.skipRequest();
+      } else {
+          pm.environment.set('DASHBOARD_ID', dashcard.dashboard_id);
+          pm.environment.set('DASHBOARD_NAME', dashcard.dashboard_name);
+          pm.environment.set('DASHCARD_ID', dashcard.id);
+          pm.environment.set('CARD_ID', dashcard.card_id);
+          pm.environment.set('CARD_NAME', dashcard.name);
+          pm.environment.set('DASHCARD_QUEUE', JSON.stringify(queue));
+      }
+    language: text/javascript
+order: 2000

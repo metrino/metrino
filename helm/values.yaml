@@ -1,0 +1,260 @@
+# Defaults that work on any cluster. Put a cluster's own settings (catalogs, hostnames, pull secrets) in a
+# separate values file passed with -f. See docs/deployment.md.
+
+ingress:
+  # Off by default: the hostname, and the annotations its ingress controller needs, depend on the cluster.
+  enabled: false
+  # The hostname Metabase is served on, required when enabled.
+  host: ""
+  annotations: {}
+
+metabase:
+  deployName: metabase-deployment
+  image: metabase/metabase:v0.64.x
+  # The port the reverse proxy listens on, on 127.0.0.1 in Metabase's pod. Metabase's Trino connections must
+  # point at it (see README.md); the web pod's sync checks that they do.
+  reverseProxyPort: 9090
+  # An admin API key, for the reverse proxy's user lookups and the Metabase sync. Created by hand, see README.md.
+  apiKeySecret:
+    name: metabase-api-key
+    key: api-key
+
+  database:
+    deployName: metabase-database-deployment
+    serviceName: metabase-database
+    selectorLabel: metbase-database
+    name: metabase-database
+    type: postgres
+    port: 5432
+
+# Trino's access policy, run by the OPA sidecar on the Trino coordinator: helm/opa/policy.rego, plus the
+# deployment's access rules. See docs/deployment.md.
+accessPolicy:
+  # Set to false to bring your own policy instead: create a ConfigMap holding your .rego files and set
+  # trino.opa.policyConfigMap to its name.
+  create: true
+  # The rules file: Rego in package trino that defines rules (opa/rules.rego is the sample). Pass it with
+  # --set-file accessPolicy.rules=<file>. Left empty, only Administrators read data. Ignored when create is
+  # false: your own ConfigMap then holds the rules.
+  rules: ""
+
+# The sample data sources in sample-connectors/, the same synthetic data compose runs: a Postgres database for
+# the example_jdbc catalog and an HTTP server for the openapi catalog. Off by default. Turning them on also
+# takes their catalogs and the openapi plugin on Trino (see docs/deployment.md).
+sampleConnectors:
+  enabled: false
+  image:
+    registry: "ghcr.io"
+    jdbcRepository: "metrino/metrino-example-jdbc"
+    httpRepository: "metrino/metrino-example-http"
+    tag: "" # set by CI
+  imagePullSecrets: []
+
+# The web site (web/ and helm/templates/web.yaml): documentation for anyone in a Metabase group, and admin pages
+# for Administrators, behind Google sign-in. Off by default. Its pod runs oauth2-proxy for the sign-in, the web
+# server, a Metabase sync and its own read-only OPA with Trino's access policy.
+#
+# The pod's metabase-sync container repeats the coordinator's Metabase sync in trino.initContainers below, with its own
+# emptyDir for the group file. Keep the two in step.
+web:
+  enabled: false
+  # The hostname the site is served on, required when enabled.
+  host: ""
+  # Where the header's Metabase tab and the admin page's links to Metabase point, e.g. https://<ingress.host>.
+  # Leave empty for neither.
+  metabaseLinkUrl: ""
+  # Where the header's Prometheus tab points, shown to Administrators only, e.g. the Prometheus server's ingress.
+  # Leave empty for no tab.
+  prometheusLinkUrl: ""
+  ingressAnnotations: {}
+  image:
+    registry: ghcr.io
+    repository: metrino/metrino-web
+    tag: "" # set by CI
+  imagePullSecrets: []
+  # Passed to oauth2-proxy as --email-domain, one per entry. "*" means any Google account may sign in; the web
+  # server's group check applies regardless, so an account without a Metabase group still sees nothing.
+  emailDomains: ["*"]
+  oauth2Proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
+    # The Secret with keys client-id and client-secret (the Google OAuth client) and cookie-secret. Created by
+    # hand.
+    secretName: web-oauth2-proxy
+
+postgresql:
+  auth:
+    username: metabase
+    database: metabase-database
+
+trino:
+  # The Trino chart's default image, official trinodb/trino, unless a values file sets trino.image.
+  # Catalogs go in trino.catalogs (see docs/deployment.md). The Trino chart adds its tpch and tpcds test
+  # catalogs unless you set them to null.
+  # The image built from trino/identity, with the Metabase pod's reverse proxy sidecar and the coordinator's
+  # Metabase sync sidecar. It's under trino, not at the top level, because the Metabase sync is in initContainers
+  # below, which the Trino chart renders with tpl in its own context, where only trino.* values are visible.
+  # The Metabase pod's template reads it from here too, so the tag is set once.
+  identityImage:
+    registry: "ghcr.io"
+    repository: "metrino/metrino-identity"
+    tag: "" # set by CI
+  additionalConfigProperties:
+    - http-server.process-forwarded=true
+  # Only Metabase and Trino's own pods may connect to Trino. Trino believes the X-Trino-User header from any
+  # client, so this is what stops other pods from claiming to be someone else. The chart's policy already
+  # lets Trino's pods reach each other.
+  networkPolicy:
+    enabled: true
+    ingress:
+      - from:
+          - podSelector:
+              matchLabels:
+                # The Metabase pod (metabase-deployment.yaml). Written out because the Trino chart can't
+                # template this list.
+                app.kubernetes.io/name: metrino
+                app.kubernetes.io/component: metabase
+        ports:
+          - protocol: TCP
+            port: 8080
+      - from:
+          - podSelector:
+              matchLabels:
+                # The Prometheus server pod. Written out because the Trino chart can't template this list.
+                app.kubernetes.io/component: server
+                app.kubernetes.io/name: prometheus
+
+        ports:
+          - protocol: TCP
+            port: 8080
+  opa:
+    enabled: true
+    # The ConfigMap with the policy, which this chart creates unless accessPolicy.create is false.
+    policyConfigMap: "trino-opa-policies"
+  # Written by hand because the chart has no setting for batch-column-masking-uri, which lets Trino ask OPA
+  # for all of a query's column masks in one request.
+  # Same URIs as trino/access-control.properties, pointed at the OPA sidecar.
+  # Coordinator only: the sidecar runs on the coordinator pod, and Trino checks query access there.
+  accessControl:
+    coordinator:
+      type: properties
+      properties: |-
+        access-control.name=opa
+        opa.policy.uri=http://127.0.0.1:8181/v1/data/trino/allow
+        opa.policy.batch-column-masking-uri=http://127.0.0.1:8181/v1/data/trino/batchColumnMasks
+  # Helm replaces lists rather than merging them, so a values file that sets initContainers.coordinator,
+  # coordinator.additionalVolumes or coordinator.additionalVolumeMounts must repeat the entries below.
+  initContainers:
+    coordinator:
+      # The Metabase sync (trino/identity/cmd/metabase-sync): writes the group file the coordinator's file group
+      # provider reads, from Metabase's users and groups. A native sidecar (restartPolicy: Always): it keeps
+      # running, and Trino only starts once its startup probe sees the group file, which Trino needs at startup.
+      - name: metabase-sync
+        image: '{{ printf "%s/%s:%s" .Values.identityImage.registry .Values.identityImage.repository (required "trino.identityImage.tag is required (CI sets it)" .Values.identityImage.tag) }}'
+        command: ["metabase-sync"]
+        restartPolicy: Always
+        env:
+          # The Metabase Service (metabase-service.yaml), port 80.
+          - name: METABASE_URL
+            value: http://metabase-service
+          # The same Secret as metabase.apiKeySecret (this file can't refer to it).
+          - name: METABASE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: metabase-api-key
+                key: api-key
+          - name: GROUP_FILE
+            value: /groups/group.txt
+          - name: SYNC_INTERVAL
+            value: "30s"
+        startupProbe:
+          exec:
+            command: ["test", "-f", "/groups/group.txt"]
+          periodSeconds: 2
+          failureThreshold: 30
+        volumeMounts:
+          - name: trino-groups
+            mountPath: /groups
+        securityContext:
+          # The image's nobody user. Given as a number so Kubernetes can check runAsNonRoot.
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+  coordinator:
+    additionalVolumes:
+      - name: trino-groups
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: trino-groups
+        mountPath: /etc/trino-groups
+        readOnly: true
+    additionalConfigFiles:
+      # Groups from the file the Metabase sync writes. Same settings as
+      # trino/group-provider.properties; keep the two in sync.
+      group-provider.properties: |-
+        group-provider.name=file
+        # Must exist when Trino starts; the Metabase sync writes an empty one first.
+        file.group-file=/etc/trino-groups/group.txt
+        # How often Trino rereads the file.
+        file.refresh-period=5s
+
+prometheus:
+  rbac:
+    create: false
+  # Otherwise get warning "would violate PodSecurity"
+  prometheus-node-exporter:
+    enabled: false
+  kube-state-metrics:
+    enabled: false
+  scrapeConfigs:
+    kubernetes-api-servers:
+      enabled: false
+    kubernetes-nodes:
+      enabled: false
+    kubernetes-nodes-cadvisor:
+      enabled: false
+    kubernetes-service-endpoints:
+      enabled: false
+    kubernetes-service-endpoints-slow:
+      enabled: false
+    prometheus-pushgateway:
+      enabled: false
+    kubernetes-services:
+      enabled: false
+    kubernetes-pods:
+      enabled: false
+    kubernetes-pods-slow:
+      enabled: false
+  extraScrapeConfigs: |
+    - job_name: 'metabase'
+      static_configs:
+        - targets:
+          - metabase-service:9191
+      relabel_configs:
+        - source_labels: [__address__]
+          target_label: __param_target
+        - source_labels: [__param_target]
+          target_label: instance
+        - target_label: __address__
+          replacement: metabase-service:9191
+    - job_name: 'trino'
+      basic_auth:
+        username: prometheus
+      static_configs:
+        - targets:
+          - metrino-trino:8080
+          - metrino-trino-worker:8080
+      relabel_configs:
+        - source_labels: [__address__]
+          target_label: __param_target
+        - source_labels: [__param_target]
+          target_label: instance
+        - target_label: __address__
+          replacement: metrino-trino:8080
+      # Advice from Trino's docs: https://trino.io/docs/current/admin/openmetrics.html
+      metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: ".+_FifteenMinute.+|.+_FiveMinute.+|.+IterativeOptimizer.+|.*io_airlift_http_client_type_HttpClient.+"
+            action: drop # dropping some highly granular metrics

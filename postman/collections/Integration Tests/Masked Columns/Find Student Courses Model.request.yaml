@@ -1,0 +1,32 @@
+$kind: http-request
+description: ""
+url: localhost:8080/api/search?models=dataset&q=Student courses
+method: GET
+auth:
+  type: apikey
+  credentials:
+    key: X-Metabase-Session
+    value: "{{METABASE_ADMIN_TOKEN}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Student courses model is configured", function() {
+          pm.response.to.have.status(200);
+          pm.response.to.be.json;
+
+          const model_name = 'Student courses';
+          const models = pm.response.json().data;
+          const student_courses = models.find(model => model.name === model_name);
+
+          pm.expect(student_courses).to.not.be.undefined;
+          pm.expect(student_courses.id).to.not.be.undefined;
+          pm.environment.set("MODEL_ID", student_courses.id);
+      });
+    language: text/javascript
+  - type: beforeRequest
+    code: |-
+      pm.test("Check the admin token", () => {
+          pm.expect(pm.environment.get('METABASE_ADMIN_TOKEN')).to.be.a("string");
+      });
+    language: text/javascript
+order: 1000

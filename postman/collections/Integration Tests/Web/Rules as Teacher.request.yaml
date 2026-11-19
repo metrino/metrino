@@ -1,0 +1,15 @@
+$kind: http-request
+description: "The access rules API is for Administrators only, so a Teacher is refused"
+url: localhost:8000/api/admin/rules
+method: GET
+headers:
+  - key: X-Forwarded-Email
+    value: "{{TEACHER_EMAIL}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Rules as Teacher", function() {
+          pm.response.to.have.status(403);
+      });
+    language: text/javascript
+order: 7000

@@ -1,0 +1,24 @@
+school_id,school_name,school_type,grade_min,grade_max,principal_id,phone,address,website
+340028b6-076b-43a2-a6cc-82dff5772e7c,Alexandria City High School King Street Campus,High School,9,12,555561825,7038246800,"3330 King Street, Alexandria, VA 22302",https://achs.acps.k12.va.us/campuses/king-street-campus
+6814d4cb-d521-4db5-b6aa-7b0a86668e15,Alexandria City High School Minnie Howard Campus,High School,9,12,724273226,7038246750,"3775 W. Braddock Road, Alexandria, VA 22302",https://achs.acps.k12.va.us/campuses/minnie-howard-campus
+7e5d1546-4375-4848-8368-e2d001690622,Francis C. Hammond Middle School,Middle Schools,6,8,871355949,7034614100,"4646 Seminary Road, Alexandria, VA 22304",https://fchs.acps.k12.va.us/
+6648a414-945f-4a87-bf0f-a3175620ee18,George Washington Middle School,Middle Schools,6,8,886753416,7037064500,"1005 Mount Vernon Avenue, Alexandria, VA 22301",https://gw.acps.k12.va.us/
+1efbfa09-b1b5-4a6d-af6c-1c8362ff38e9,Jefferson-Houston PreK-8 IB School,K-8 Schools,PreK,8,372244404,7037064400,"1501 Cameron Street, Alexandria, VA 22314",https://jh.acps.k12.va.us/
+8cc879ed-0084-403e-8295-2ab9e054ceb5,Patrick Henry K-8 School,K-8 Schools,K,8,986565842,7034614170,"4643 Taney Avenue, Alexandria, VA 22304",https://ph.acps.k12.va.us/
+0acc6c34-9063-4a27-ac53-9f4fadeb9437,Early Childhood Center,Elementary and PreK Schools,PreK,PreK,549605711,7035786822,"5651 Rayburn Avenue, Alexandria, VA 22311",https://ecc.acps.k12.va.us/
+5a7c001e-a7db-4524-bb5a-f81c836907cc,Charles Barrett Elementary School,Elementary and PreK Schools,PreK,5,218810745,7038246960,"1115 Martha Custis Drive, Alexandria, VA 22302",https://cb.acps.k12.va.us/
+7f104289-07dc-4c4d-b4dc-bf8eced82037,"Cora Kelly School of Math, Science and Technology",Elementary and PreK Schools,PreK,5,162708866,7037064420,"3600 Commonwealth Avenue, Alexandria, VA 22305",https://ck.acps.k12.va.us/
+5aef9b8a-1c62-424c-be22-18be30d829a8,Douglas MacArthur Elementary School,Elementary and PreK Schools,K,5,572832655,7036198520,"1101 Janneys Lane, Alexandria, VA 22302",https://dm.acps.k12.va.us/
+8f05e8ed-8135-47b2-bd74-72cb1c5d58e4,Ferdinand T. Day Elementary School,Elementary and PreK Schools,K,5,966089458,7036198430,"1701 North Beauregard Street, Alexandria, VA 22311",https://ftd.acps.k12.va.us/
+1303eb0a-c75f-4e68-84a6-70818c7bab17,George Mason Elementary School,Elementary and PreK Schools,K,5,202593705,7037064470,"1703 North Beauregard St. Alexandria, VA. 22311",https://gm.acps.k12.va.us/
+11efb6f1-84ab-46af-b388-34e727c2a71d,James K. Polk Elementary School,Elementary and PreK Schools,K,5,369119650,7034614180,"5000 Polk Avenue, Alexandria, VA 22304",https://jkp.acps.k12.va.us/
+7b1f57cc-4616-431b-8535-33c1dedc0941,John Adams Elementary School,Elementary and PreK Schools,K,5,349421999,7038246970,"5651 Rayburn Avenue, Alexandria, VA 22311",https://ja.acps.k12.va.us/
+4efcbe6e-e3a8-4fe2-9f5b-644dfadb3d79,Lyles-Crouch Traditional Academy,Elementary and PreK Schools,K,5,105317215,7037064430,"530 S. St. Asaph Street, Alexandria, VA 22314",https://lcta.acps.k12.va.us/
+3667ea52-4a3f-4983-8a2c-ead6541efa30,Mount Vernon Community School,Elementary and PreK Schools,K,5,702080243,7037064460,"2601 Commonwealth Avenue, Alexandria, VA 22305",https://mvcs.acps.k12.va.us/
+f29d412a-369b-48e3-9f23-8fca0c68d458,Naomi L. Brooks Elementary School,Elementary and PreK Schools,K,5,668149746,7037064440,"600 Russell Road, Alexandria, VA 22301",https://nlb.acps.k12.va.us/
+39c0862a-2a3d-42ce-8a8e-696367dc97f4,Samuel W. Tucker Elementary School,Elementary and PreK Schools,K,5,548009872,7039336300,"435 Ferdinand Day Drive, Alexandria, VA 22304",https://swt.acps.k12.va.us/
+2ab22b07-4e82-4aba-be8e-1393a76cd6f3,William Ramsay Elementary School,Elementary and PreK Schools,PreK,5,494957730,7038246950,"5700 Sanger Avenue, Alexandria, VA 22311",https://wr.acps.k12.va.us/
+b4e04633-5487-442c-9842-fa1cfbd86460,Chance for Change Academy,Alternative Programs and Schools,,,548730484,7038881204,"216 South Peyton Street, Alexandria, VA 22314",https://achs.acps.k12.va.us/campuses/chance-for-change
+9b6991af-95c4-4df3-a650-93d04fa3001d,Northern Virginia Juvenile Detention Center School,Alternative Programs and Schools,,,939649283,7034614086,"200 South Whiting Street, Alexandria, VA 22304",https://www.acps.k12.va.us/programs-services/alternative-programs/northern-virginia-juvenile-detention-center
+3c047f74-b6f9-48e9-9f07-9e87b38a9410,Adult Learning Center Braddock Place Campus At ACPS Central Office,Alternative Programs and Schools,,,733533549,7036198027,"1340 Braddock Place, 7th Floor, Alexandria, VA 22314",https://www.acps.k12.va.us/programs-services/adult-education
+36eff7e9-9a7e-4d1c-bd34-6e39fa305c16,Alexandria City High School Evening Administrative Center,Alternative Programs and Schools,,,111073002,7038246845,"3330 King Street, Room A123, Alexandria, VA 22302",

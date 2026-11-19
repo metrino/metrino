@@ -1,0 +1,16 @@
+$kind: http-request
+description: "Anyone in a Metabase group can read the docs"
+url: localhost:8000/
+method: GET
+headers:
+  - key: X-Forwarded-Email
+    value: "{{TEACHER_EMAIL}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Docs as Teacher", function() {
+          pm.response.to.have.status(200);
+          pm.expect(pm.response.text()).to.include('Documentation');
+      });
+    language: text/javascript
+order: 3000
