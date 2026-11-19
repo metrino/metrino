@@ -1,0 +1,49 @@
+name: Build and Publish Images
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  IDENTITY_IMAGE_NAME: metrino-identity
+  WEB_IMAGE_NAME: metrino-web
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs: 
+      imageTag: ${{ steps.build.outputs.imageTag }}
+    permissions:
+      contents: read
+      packages: write # needed for GITHUB_TOKEN to push to ghcr.io
+
+    steps:
+        - uses: actions/checkout@v4
+          with:
+              fetch-depth: 0
+
+        - name: Log in to registry
+          uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Build and push images
+          id: build
+          run: |
+            # ghcr.io requires lowercase image names
+            REGISTRY=$(echo "ghcr.io/${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+            # The images come from the same commit, so they share one tag.
+            TAG=$(git rev-parse --short HEAD)
+            # build_and_push CONTEXT IMAGE_NAME [DOCKER_BUILD_ARGS...]
+            build_and_push() {
+              context=$1 name=$2
+              shift 2
+              docker build "$context" --tag "$REGISTRY/$name:$TAG" "$@"
+              docker push "$REGISTRY/$name:$TAG"
+            }
+            build_and_push ./trino/identity "$IDENTITY_IMAGE_NAME"
+            build_and_push ./web "$WEB_IMAGE_NAME"
