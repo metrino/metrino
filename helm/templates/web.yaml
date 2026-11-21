@@ -1,7 +1,7 @@
 {{- if .Values.web.enabled }}
 {{- $host := required "web.host is required when web.enabled is true" .Values.web.host }}
 {{- $image := .Values.web.image }}
-{{- $tag := required "web.image.tag is required when web.enabled is true (CI sets it)" $image.tag }}
+{{- $tag := $image.tag | default .Chart.AppVersion }}
 # The docs and admin site (web/): docs for anyone in a Metabase group, admin pages for Administrators. People
 # sign in with Google through oauth2-proxy, the only container with a port in the Service. The web server
 # decides what each person sees from the group file and its own OPA, which runs Trino's access policy. Nothing
@@ -36,7 +36,7 @@ spec:
       # tables Metabase knows, for the admin page.
       - name: metabase-sync
         {{- with .Values.trino.identityImage }}
-        image: {{ printf "%s/%s:%s" .registry .repository (required "trino.identityImage.tag is required (CI sets it)" .tag) | quote }}
+        image: {{ printf "%s/%s:%s" .registry .repository (.tag | default $.Chart.AppVersion) | quote }}
         {{- end }}
         command: ["metabase-sync"]
         restartPolicy: Always

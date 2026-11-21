@@ -20,7 +20,7 @@ helm upgrade --install metrino ./helm -n metrino --create-namespace \
   --set trino.identityImage.tag=<tag>
 ```
 
-Also set `sampleConnectors.image.tag` and `web.image.tag` if you turn those on.
+Also set `sampleConnectors.image.tag` if you turn those on. `web.image.tag` defaults to the chart's appVersion.
 
 ### Metabase API key
 The reverse proxy (a sidecar in the Metabase pod) uses a Metabase API key to look up which user ran each query, and the Metabase sync (a sidecar in the Trino coordinator pod) uses it to read users and groups. The web frontend's pod (when `web.enabled` is true) runs its own Metabase sync with it too. Each reads the key from the `metabase-api-key` Secret, and none of these pods starts until that Secret exists. Create it by hand before the first deploy:

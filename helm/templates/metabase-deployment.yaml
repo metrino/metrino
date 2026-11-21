@@ -46,7 +46,7 @@ spec:
       # must point here. It is set in Metabase, not here (see README.md).
       - name: trino-reverse-proxy
         {{- with .Values.trino.identityImage }}
-        image: {{ printf "%s/%s:%s" .registry .repository (required "trino.identityImage.tag is required (CI sets it)" .tag) | quote }}
+        image: {{ printf "%s/%s:%s" .registry .repository (.tag | default $.Chart.AppVersion) | quote }}
         {{- end }}
         command: ["reverse-proxy"]
         env:

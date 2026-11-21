@@ -70,7 +70,7 @@ web:
   image:
     registry: ghcr.io
     repository: metrino/metrino-web
-    tag: "" # set by CI
+    tag: "" # defaults to the chart's appVersion
   imagePullSecrets: []
   # Passed to oauth2-proxy as --email-domain, one per entry. "*" means any Google account may sign in; the web
   # server's group check applies regardless, so an account without a Metabase group still sees nothing.

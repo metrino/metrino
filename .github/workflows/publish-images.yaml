@@ -1,4 +1,4 @@
-name: Build and Publish Images
+name: Publish images and chart
 
 on:
   push:
@@ -20,18 +20,18 @@ jobs:
       packages: write # needed for GITHUB_TOKEN to push to ghcr.io
 
     steps:
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
           with:
               fetch-depth: 0
 
         - name: Log in to registry
-          uses: docker/login-action@v3
+          uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # 4.8.0
           with:
             registry: ghcr.io
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Build and push images
+        - name: Build and push images 
           id: build
           run: |
             # ghcr.io requires lowercase image names
@@ -47,3 +47,56 @@ jobs:
             }
             build_and_push ./trino/identity "$IDENTITY_IMAGE_NAME"
             build_and_push ./web "$WEB_IMAGE_NAME"
+            echo "imageTag=$TAG" >> "$GITHUB_OUTPUT"
+
+  publish-chart:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write # needed for GITHUB_TOKEN to push to ghcr.io
+
+    steps:
+        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          with:
+              fetch-depth: 0
+
+        - name: Set environment variables
+          id: set-variables
+          run: |
+            TAG=$(git rev-parse --short HEAD)
+            echo "REPOSITORY=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+            echo "VERSION=$(yq -r .version ./helm/Chart.yaml)-$TAG" >> "$GITHUB_OUTPUT"
+
+        - name: Set up Helm
+          uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+          with:
+              version: v4.3.2
+
+        - name: Build helm dependencies
+          run: |
+            helm repo add bitnami https://charts.bitnami.com/bitnami
+            helm repo add trino https://trinodb.github.io/charts
+            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+            helm dependency build ./helm
+
+        - name: Lint charts
+          run: helm lint helm -f helm/values.yaml --set-file accessPolicy.rules=opa/rules.rego
+
+        - name: Login to GitHub Container Registry
+          uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # 4.8.0
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ github.token }}
+   
+        - name: Package and push helm chart
+          run: |
+            helm package ./helm \
+              --version ${{ steps.set-variables.outputs.VERSION }} \
+              --app-version ${{ needs.build.outputs.imageTag }}
+            helm push ./metrino-${{ steps.set-variables.outputs.VERSION }}.tgz \
+              oci://${{ steps.set-variables.outputs.REPOSITORY }}/charts
+
