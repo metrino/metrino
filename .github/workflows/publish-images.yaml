@@ -93,6 +93,14 @@ jobs:
 
             helm dependency build ./helm
 
+        # The coordinator's Metabase sync sidecar is rendered by the Trino subchart, which can't see this chart's
+        # appVersion, so the packaged values.yaml carries the identity image's tag instead. This changes only the
+        # packaged copy; values.yaml in git keeps tag: "".
+        - name: Set the identity image tag
+          env:
+            IMAGE_TAG: ${{ needs.build.outputs.imageTag }}
+          run: yq -i '.trino.identityImage.tag = strenv(IMAGE_TAG)' helm/values.yaml
+
         - name: Lint charts
           run: helm lint helm -f helm/values.yaml --set-file accessPolicy.rules=opa/rules.rego
 

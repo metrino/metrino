@@ -97,7 +97,10 @@ trino:
   identityImage:
     registry: "ghcr.io"
     repository: "metrino/metrino-identity"
-    tag: "" # set by CI
+    # The publish workflow writes the image built from the same commit here when it packages the chart (the
+    # Trino subchart can't read this chart's appVersion), so leave it empty. Installs from a checkout set it with
+    # --set trino.identityImage.tag=<tag>.
+    tag: ""
   additionalConfigProperties:
     - http-server.process-forwarded=true
   # Only Metabase and Trino's own pods may connect to Trino. Trino believes the X-Trino-User header from any
