@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -165,6 +166,21 @@ func syncTime(modTime time.Time) *time.Time {
 // Trino has. It is only meaningful when trinoCatalogs is known (not nil).
 func catalogInTrino(trinoCatalogs []string, catalog string) bool {
 	return catalog == systemCatalog || slices.Contains(trinoCatalogs, catalog)
+}
+
+// prometheusURLFromEnv returns PROMETHEUS_URL, the Prometheus server to show Administrators, or nil if it is
+// unset. It must be http(s)://host[:port] with no path: requests keep their own /prometheus/ path.
+func prometheusURLFromEnv() (*url.URL, error) {
+	value := os.Getenv("PROMETHEUS_URL")
+	if value == "" {
+		return nil, nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.Trim(u.Path, "/") != "" ||
+		u.RawQuery != "" || u.User != nil {
+		return nil, fmt.Errorf("PROMETHEUS_URL %q is not http(s)://host[:port] without a path", value)
+	}
+	return u, nil
 }
 
 // trinoCatalogsFromEnv returns the names in TRINO_CATALOGS, comma-separated, sorted. Unset is nil, meaning the

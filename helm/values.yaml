@@ -51,8 +51,9 @@ sampleConnectors:
   imagePullSecrets: []
 
 # The web site (web/ and helm/templates/web.yaml): documentation for anyone in a Metabase group, and admin pages
-# for Administrators, behind Google sign-in. Off by default. Its pod runs oauth2-proxy for the sign-in, the web
-# server, a Metabase sync and its own read-only OPA with Trino's access policy.
+# and Prometheus (at /prometheus/) for Administrators, behind Google sign-in. Off by default. Its pod runs
+# oauth2-proxy for the sign-in, the web server, a Metabase sync and its own read-only OPA with Trino's access
+# policy.
 #
 # The pod's metabase-sync container repeats the coordinator's Metabase sync in trino.initContainers below, with its own
 # emptyDir for the group file. Keep the two in step.
@@ -63,9 +64,6 @@ web:
   # Where the header's Metabase tab and the admin page's links to Metabase point, e.g. https://<ingress.host>.
   # Leave empty for neither.
   metabaseLinkUrl: ""
-  # Where the header's Prometheus tab points, shown to Administrators only, e.g. the Prometheus server's ingress.
-  # Leave empty for no tab.
-  prometheusLinkUrl: ""
   ingressAnnotations: {}
   image:
     registry: ghcr.io
@@ -204,6 +202,14 @@ trino:
         file.refresh-period=5s
 
 prometheus:
+  server:
+    # Administrators see Prometheus at /prometheus/ on the web site, through the web server, which passes the
+    # path on unchanged. So Prometheus serves under /prometheus too: prefixURL is where it routes (and where the
+    # chart's probes and config reloader go), baseURL is where it sends / and builds its links. They must stay
+    # /prometheus, which web.yaml checks. No ingress: the NetworkPolicy in prometheus-network-policy.yaml admits
+    # only the web pod.
+    prefixURL: /prometheus
+    baseURL: /prometheus
   rbac:
     create: false
   # Otherwise get warning "would violate PodSecurity"
@@ -212,6 +218,9 @@ prometheus:
   kube-state-metrics:
     enabled: false
   scrapeConfigs:
+    # Prometheus's own metrics, under server.prefixURL like the rest of it.
+    prometheus:
+      metrics_path: /prometheus/metrics
     kubernetes-api-servers:
       enabled: false
     kubernetes-nodes:

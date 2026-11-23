@@ -134,6 +134,37 @@ func TestReadStatusMissing(t *testing.T) {
 	}
 }
 
+func TestPrometheusURLEnv(t *testing.T) {
+	for _, tt := range []struct {
+		value, want string // want "" is nil, "error" an error
+	}{
+		{"", ""},
+		{"http://prometheus-server", "http://prometheus-server"},
+		{"http://prometheus-server:80/", "http://prometheus-server:80/"},
+		// The path goes to Prometheus as is, so a prefix here would be doubled.
+		{"http://prometheus-server/prometheus", "error"},
+		{"prometheus-server:80", "error"},
+		{"ftp://prometheus-server", "error"},
+		{"http://", "error"},
+		{"http://prometheus-server?x=1", "error"},
+	} {
+		t.Setenv("PROMETHEUS_URL", tt.value)
+		got, err := prometheusURLFromEnv()
+		switch {
+		case tt.want == "error":
+			if err == nil {
+				t.Errorf("%q: %v, want an error", tt.value, got)
+			}
+		case err != nil:
+			t.Errorf("%q: %v", tt.value, err)
+		case tt.want == "" && got != nil:
+			t.Errorf("%q: %v, want nil", tt.value, got)
+		case tt.want != "" && (got == nil || got.String() != tt.want):
+			t.Errorf("%q: %v, want %s", tt.value, got, tt.want)
+		}
+	}
+}
+
 func TestTrinoCatalogsEnv(t *testing.T) {
 	t.Setenv("TRINO_CATALOGS", " openapi,example_jdbc ")
 	if got, want := trinoCatalogsFromEnv(), []string{"example_jdbc", "openapi"}; !reflect.DeepEqual(got, want) {

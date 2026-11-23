@@ -114,13 +114,20 @@ required. The settings under `web:`:
   to Metabase's admin pages (connection settings, table metadata) start there too. It is only a link for
   people's browsers, and the pod's own Metabase sync reaches Metabase another way. Leave it empty for no tab
   and no links.
-- `prometheusLinkUrl`: where the header's Prometheus tab points, e.g. the Prometheus server's ingress
-  (`prometheus.server.ingress`). Only Administrators see the tab. Leave it empty for no tab.
 - `imagePullSecrets` and `ingressAnnotations`: as for Metabase's ingress.
 - `emailDomains`: which Google accounts may sign in, one `--email-domain` for oauth2-proxy each. `["*"]`, the
   default, lets any account sign in; the web server shows nothing to anyone without a Metabase group.
 - `oauth2Proxy.image` and `oauth2Proxy.secretName`: the oauth2-proxy image, and the Secret with `client-id`,
   `client-secret` and `cookie-secret`, created by hand as the README describes. The pod doesn't start without it.
+
+Administrators also see Prometheus on the site, at `/prometheus/` (the header's Prometheus tab). The web server
+passes those requests to the Prometheus server's Service, without the person's session cookie or email, and passes
+on POSTs only to the query API, never to `/-/quit` or `/-/reload`. Prometheus has no ingress of its own, and a
+NetworkPolicy (`helm/templates/prometheus-network-policy.yaml`) admits only the web pod, so without the site
+nobody reaches it. Only connections to Prometheus are restricted: it still scrapes Metabase and Trino. The path
+goes to Prometheus unchanged, so `helm/values.yaml` serves Prometheus under `/prometheus` too
+(`prometheus.server.prefixURL` and `baseURL`, and the self-scrape's `metrics_path`). The chart refuses to render
+the site if `prefixURL` isn't `/prometheus` or `baseURL` doesn't end in it.
 
 The pod's Metabase sync and OPA sidecars repeat the coordinator's settings: the sync is configured like the one in
 `trino.initContainers` in `helm/values.yaml`, and the OPA reads the same policy ConfigMap

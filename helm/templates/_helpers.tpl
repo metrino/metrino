@@ -102,3 +102,12 @@ The web Service's name (web.yaml), which the web Ingress sends to.
 {{- define "metrino.web.serviceName" -}}
 {{- printf "%s-web" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/*
+The Prometheus server's in-cluster URL, from the Prometheus chart's name helper, so it follows the Service that
+chart renders. No path: the web server sends each request's own /prometheus/ path.
+*/}}
+{{- define "metrino.prometheus.url" -}}
+{{- $prometheus := dict "Values" .Values.prometheus "Release" .Release "Chart" (dict "Name" "prometheus") -}}
+{{- printf "http://%s:%v" (include "prometheus.server.fullname" $prometheus) .Values.prometheus.server.service.servicePort -}}
+{{- end -}}
