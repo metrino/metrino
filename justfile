@@ -31,3 +31,8 @@ test-opa:
 
 web-dev:
 	cd web/frontend && npm run dev
+
+helm-template image_tag:
+	helm template my-amazing-chart ./helm -n abcd \
+		--set trino.identityImage.tag="{{image_tag}}" \
+		-f example-values.yaml

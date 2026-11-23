@@ -42,7 +42,7 @@ spec:
         restartPolicy: Always
         env:
           - name: METABASE_URL
-            value: http://metabase-service
+            value: {{ include "metrino.metabase.url" . | quote }}
           - name: METABASE_API_KEY
             valueFrom:
               secretKeyRef:
@@ -231,7 +231,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: web
+  name: {{ include "metrino.web.serviceName" . }}
   labels:
     {{- include "metrino.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
@@ -265,7 +265,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: web
+            name: {{ include "metrino.web.serviceName" . }}
             port:
               number: 80
 ---

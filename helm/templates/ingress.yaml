@@ -16,7 +16,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: metabase-service
+            name: {{ include "metrino.metabase.serviceName" . }}
             port:
               number: 80
 {{- end }}
