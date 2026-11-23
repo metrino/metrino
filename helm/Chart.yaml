@@ -2,8 +2,8 @@ apiVersion: v2
 name: metrino
 description: A Helm chart for Kubernetes
 type: application
-version: 0.1.0
-appVersion: "0.0.1"
+version: 0.0.0 # overwritten by chart publish CI
+appVersion: "0.0.0" # overwritten by chart publish CI
 
 dependencies:
   - name: postgresql

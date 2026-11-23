@@ -70,7 +70,7 @@ web:
   image:
     registry: ghcr.io
     repository: metrino/metrino-web
-    tag: "" # set by CI
+    tag: "" # defaults to the chart's appVersion
   imagePullSecrets: []
   # Passed to oauth2-proxy as --email-domain, one per entry. "*" means any Google account may sign in; the web
   # server's group check applies regardless, so an account without a Metabase group still sees nothing.
@@ -97,7 +97,10 @@ trino:
   identityImage:
     registry: "ghcr.io"
     repository: "metrino/metrino-identity"
-    tag: "" # set by CI
+    # The publish workflow writes the image built from the same commit here when it packages the chart (the
+    # Trino subchart can't read this chart's appVersion), so leave it empty. Installs from a checkout set it with
+    # --set trino.identityImage.tag=<tag>.
+    tag: ""
   additionalConfigProperties:
     - http-server.process-forwarded=true
   # Only Metabase and Trino's own pods may connect to Trino. Trino believes the X-Trino-User header from any
@@ -153,9 +156,9 @@ trino:
         command: ["metabase-sync"]
         restartPolicy: Always
         env:
-          # The Metabase Service (metabase-service.yaml), port 80.
+          # The Metabase Service (metabase-service.yaml), port 80. The chart's helper works here: it only uses .Release.
           - name: METABASE_URL
-            value: http://metabase-service
+            value: '{{ include "metrino.metabase.url" . }}'
           # The same Secret as metabase.apiKeySecret (this file can't refer to it).
           - name: METABASE_API_KEY
             valueFrom:
@@ -231,28 +234,28 @@ prometheus:
     - job_name: 'metabase'
       static_configs:
         - targets:
-          - metabase-service:9191
+          - {{ .Release.Name }}-metabase-service:9191
       relabel_configs:
         - source_labels: [__address__]
           target_label: __param_target
         - source_labels: [__param_target]
           target_label: instance
         - target_label: __address__
-          replacement: metabase-service:9191
+          replacement: {{ .Release.Name }}-metabase-service:9191
     - job_name: 'trino'
       basic_auth:
         username: prometheus
       static_configs:
         - targets:
-          - metrino-trino:8080
-          - metrino-trino-worker:8080
+          - {{ .Release.Name }}-trino:8080
+          - {{ .Release.Name }}-trino-worker:8080
       relabel_configs:
         - source_labels: [__address__]
           target_label: __param_target
         - source_labels: [__param_target]
           target_label: instance
         - target_label: __address__
-          replacement: metrino-trino:8080
+          replacement: {{ .Release.Name }}-trino:8080
       # Advice from Trino's docs: https://trino.io/docs/current/admin/openmetrics.html
       metric_relabel_configs:
           - source_labels: [__name__]

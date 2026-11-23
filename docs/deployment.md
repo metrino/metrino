@@ -102,13 +102,13 @@ The chart then ignores `accessPolicy.rules`, so put your rules in that ConfigMap
 ## Web frontend
 
 `web.enabled` deploys the docs and admin website (`web/`) in its own pod: oauth2-proxy for Google sign-in, the
-web server, a Metabase sync and a read-only OPA. It is off unless `web.enabled` is true, and then `web.host` and
-`web.image.tag` are required. The settings under `web:`:
+web server, a Metabase sync and a read-only OPA. It is off unless `web.enabled` is true, and then `web.host` is
+required. The settings under `web:`:
 
 - `host`: the hostname it is served on. Its ingress needs a valid certificate for this name. A wildcard
   certificate covers only names one level down: `*.example.org` covers `metrino-web.example.org` but not
   `web.metrino.example.org`.
-- `image`: the web server's image, built from `web/`. Set `image.tag`; point `image.registry` and
+- `image`: the web server's image, built from `web/`. `image.tag` defaults to the chart's appVersion; point `image.registry` and
   `image.repository` at your own registry if you build it yourself.
 - `metabaseLinkUrl`: where the header's Metabase tab points, e.g. the Metabase ingress. The admin page's links
   to Metabase's admin pages (connection settings, table metadata) start there too. It is only a link for

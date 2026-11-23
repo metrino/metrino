@@ -80,3 +80,25 @@ the Service that chart renders.
 {{- $trino := dict "Values" .Values.trino "Release" .Release "Chart" (dict "Name" "trino") -}}
 {{- printf "http://%s:%v" (include "trino.fullname" $trino) .Values.trino.service.port -}}
 {{- end -}}
+
+{{/*
+The Metabase Service's name (metabase-service.yaml). Uses only .Release, so it also works from the Trino chart's
+tpl'd values (trino.initContainers in values.yaml), where .Values is the Trino chart's.
+*/}}
+{{- define "metrino.metabase.serviceName" -}}
+{{- printf "%s-metabase-service" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Metabase's in-cluster URL: the Service's port 80, which goes to Metabase's 3000. Like the name, uses only .Release.
+*/}}
+{{- define "metrino.metabase.url" -}}
+{{- printf "http://%s" (include "metrino.metabase.serviceName" .) -}}
+{{- end -}}
+
+{{/*
+The web Service's name (web.yaml), which the web Ingress sends to.
+*/}}
+{{- define "metrino.web.serviceName" -}}
+{{- printf "%s-web" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
