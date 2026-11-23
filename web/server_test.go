@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -186,13 +189,127 @@ func TestMe(t *testing.T) {
 func TestConfig(t *testing.T) {
 	cfg := testConfig(t, testGroups)
 	cfg.metabaseLinkURL = "https://metabase.example.com"
-	cfg.prometheusLinkURL = "https://metrics.example.com"
+	// Without Prometheus, nobody gets a tab.
+	checkJSON(t, get(cfg, "/api/config", "admin@example.com"),
+		`{"metabaseUrl":"https://metabase.example.com","prometheusUrl":""}`)
+	cfg.prometheusURL = &url.URL{Scheme: "http", Host: "prometheus-server"}
 	checkJSON(t, get(cfg, "/api/config", "analyst@example.com"),
 		`{"metabaseUrl":"https://metabase.example.com","prometheusUrl":""}`)
 	checkJSON(t, get(cfg, "/api/config", "admin@example.com"),
-		`{"metabaseUrl":"https://metabase.example.com","prometheusUrl":"https://metrics.example.com"}`)
+		`{"metabaseUrl":"https://metabase.example.com","prometheusUrl":"/prometheus/"}`)
 	if w := get(cfg, "/api/config", "stranger@example.com"); w.Code != http.StatusForbidden {
 		t.Errorf("status %d for a non-member, want 403", w.Code)
+	}
+}
+
+// upstreamRequest is what the fake Prometheus received.
+type upstreamRequest struct {
+	method, uri, body string
+	header            http.Header
+}
+
+// fakePrometheus serves "prometheus <method> <request URI>" to every request, and records each one.
+func fakePrometheus(t *testing.T) (*url.URL, *[]upstreamRequest) {
+	t.Helper()
+	var got []upstreamRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = append(got, upstreamRequest{r.Method, r.RequestURI, string(body), r.Header.Clone()})
+		fmt.Fprintf(w, "prometheus %s %s", r.Method, r.RequestURI)
+	}))
+	t.Cleanup(server.Close)
+	u, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u, &got
+}
+
+// send sends a request with the given method and body for target, as email, with a session cookie.
+func send(cfg config, method, target, body, email string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(method, target, strings.NewReader(body))
+	if body != "" {
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	r.Header.Set(emailHeader, email)
+	r.Header.Set("X-Forwarded-User", "123")
+	r.Header.Set("Cookie", "_oauth2_proxy=secret")
+	w := httptest.NewRecorder()
+	newHandler(cfg).ServeHTTP(w, r)
+	return w
+}
+
+// Only Administrators reach Prometheus, at the same path, without who they are or their session cookie. POST goes
+// to the query API only, never to the lifecycle endpoints.
+func TestPrometheus(t *testing.T) {
+	cfg := testConfig(t, testGroups)
+	upstream, got := fakePrometheus(t)
+	cfg.prometheusURL = upstream
+
+	for _, tt := range []struct {
+		method, path, body, email string
+		status                    int
+		forwarded                 string // the fake's reply, "" if the request must not reach it
+	}{
+		{"GET", "/prometheus/query", "", "teacher@example.com", http.StatusForbidden, ""},
+		{"GET", "/prometheus/query", "", "stranger@example.com", http.StatusForbidden, ""},
+		{"GET", "/prometheus/query?g0.expr=up", "", "admin@example.com", http.StatusOK,
+			"prometheus GET /prometheus/query?g0.expr=up"},
+		{"POST", "/prometheus/api/v1/query", "query=up", "admin@example.com", http.StatusOK,
+			"prometheus POST /prometheus/api/v1/query"},
+		{"POST", "/prometheus/api/v1/query", "query=up", "teacher@example.com", http.StatusForbidden, ""},
+		{"POST", "/prometheus/-/quit", "", "admin@example.com", http.StatusMethodNotAllowed, ""},
+		{"POST", "/prometheus/-/reload", "", "admin@example.com", http.StatusMethodNotAllowed, ""},
+		{"GET", "/prometheus/x/../../admin/", "", "admin@example.com", http.StatusMovedPermanently, ""},
+	} {
+		*got = nil
+		w := send(cfg, tt.method, tt.path, tt.body, tt.email)
+		name := tt.method + " " + tt.path + " as " + tt.email
+		if w.Code != tt.status {
+			t.Errorf("%s: status %d, want %d", name, w.Code, tt.status)
+		}
+		if tt.forwarded == "" {
+			if len(*got) != 0 {
+				t.Errorf("%s: reached Prometheus as %+v", name, *got)
+			}
+			continue
+		}
+		if w.Body.String() != tt.forwarded {
+			t.Errorf("%s: body %q, want %q", name, w.Body, tt.forwarded)
+		}
+		if len(*got) != 1 {
+			t.Fatalf("%s: Prometheus got %d requests, want 1", name, len(*got))
+		}
+		req := (*got)[0]
+		if req.body != tt.body {
+			t.Errorf("%s: Prometheus got body %q, want %q", name, req.body, tt.body)
+		}
+		for _, header := range []string{"Cookie", emailHeader, "X-Forwarded-User"} {
+			if v := req.header.Values(header); len(v) != 0 {
+				t.Errorf("%s: Prometheus got %s %q, want none", name, header, v)
+			}
+		}
+		if csp := w.Header().Values("Content-Security-Policy"); !slices.Equal(csp, []string{prometheusContentSecurityPolicy}) {
+			t.Errorf("%s: Content-Security-Policy %q, want only %q", name, csp, prometheusContentSecurityPolicy)
+		}
+		if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
+			t.Errorf("%s: X-Frame-Options %q, want DENY", name, got)
+		}
+	}
+
+	if w := get(cfg, "/prometheus", "teacher@example.com"); w.Code != http.StatusMovedPermanently ||
+		w.Header().Get("Location") != "/prometheus/" {
+		t.Errorf("/prometheus: status %d to %q, want 301 to /prometheus/", w.Code, w.Header().Get("Location"))
+	}
+	// A refusal keeps the site's own policy.
+	if w := get(cfg, "/prometheus/query", "teacher@example.com"); w.Header().Get("Content-Security-Policy") != contentSecurityPolicy {
+		t.Errorf("refused /prometheus/query: Content-Security-Policy %q, want the site's", w.Header().Get("Content-Security-Policy"))
+	}
+
+	// Without Prometheus, its path is just a missing page.
+	cfg.prometheusURL = nil
+	if w := get(cfg, "/prometheus/query", "admin@example.com"); w.Code != http.StatusNotFound {
+		t.Errorf("/prometheus/query without Prometheus: status %d, want 404", w.Code)
 	}
 }
 

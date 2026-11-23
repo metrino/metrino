@@ -2,10 +2,19 @@
 {{- $host := required "web.host is required when web.enabled is true" .Values.web.host }}
 {{- $image := .Values.web.image }}
 {{- $tag := $image.tag | default .Chart.AppVersion }}
+
+{{- /* The web server serves Prometheus at /prometheus/ and passes the path on, so Prometheus must serve there. */}}
+{{- with .Values.prometheus.server }}
+{{- if or (ne .prefixURL "/prometheus") (not (hasSuffix "/prometheus" (trimSuffix "/" .baseURL))) }}
+{{- fail "prometheus.server.prefixURL must be /prometheus, and prometheus.server.baseURL must end in /prometheus: the web server serves Prometheus there" }}
+{{- end }}
+{{- end }}
+
 # The docs and admin site (web/): docs for anyone in a Metabase group, admin pages for Administrators. People
 # sign in with Google through oauth2-proxy, the only container with a port in the Service. The web server
 # decides what each person sees from the group file and its own OPA, which runs Trino's access policy. Nothing
-# in this pod connects to Trino: Trino's NetworkPolicy only admits Metabase and Trino's own pods.
+# in this pod connects to Trino: Trino's NetworkPolicy only admits Metabase and Trino's own pods. Administrators
+# also see Prometheus through the web server, the only pod Prometheus's NetworkPolicy admits.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -149,10 +158,9 @@ spec:
           - name: METABASE_LINK_URL
             value: {{ . | quote }}
           {{- end }}
-          {{- with .Values.web.prometheusLinkUrl }}
-          - name: PROMETHEUS_LINK_URL
-            value: {{ . | quote }}
-          {{- end }}
+          # Administrators see Prometheus at /prometheus/, which the web server passes on with the path unchanged.
+          - name: PROMETHEUS_URL
+            value: {{ include "metrino.prometheus.url" . | quote }}
         livenessProbe:
           exec:
             command: ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/healthz"]

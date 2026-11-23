@@ -10,6 +10,7 @@ import (
 	"log"
 	"maps"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"path"
 	"slices"
@@ -40,15 +41,16 @@ type config struct {
 	// admin pages start. Empty means no tab and no links. Metabase is on its own host, so only the deployment
 	// knows it.
 	metabaseLinkURL string
-	// prometheusLinkURL is where the header's Prometheus tab points, for Administrators only. Empty means no tab.
-	prometheusLinkURL string
+	// prometheusURL is the Prometheus server the web server shows Administrators at prometheusPath. nil means
+	// no Prometheus, and no tab.
+	prometheusURL *url.URL
 	// now is the time the admin page measures ages from, time.Now if nil.
 	now func() time.Time
 }
 
-// newHandler serves the docs to anyone in at least one group, and /admin/ and /api/admin/ only to members of
-// adminGroup. Every route but /healthz checks the person on every request, so a change to the group file takes
-// effect at once.
+// newHandler serves the docs to anyone in at least one group, and /admin/, /api/admin/ and Prometheus only to
+// members of adminGroup. Every route but /healthz checks the person on every request, so a change to the group
+// file takes effect at once.
 func newHandler(cfg config) http.Handler {
 	files := http.FileServer(indexOnly{http.Dir(cfg.staticDir)})
 	member := memberCheck(cfg.groupFile)
@@ -70,7 +72,49 @@ func newHandler(cfg config) http.Handler {
 	mux.Handle("GET /admin", http.RedirectHandler("/admin/", http.StatusMovedPermanently))
 	mux.Handle("GET /admin/", member(adminOnly(admin)))
 	mux.Handle("GET /api/admin/", member(adminOnly(admin)))
+	if cfg.prometheusURL != nil {
+		prometheus := member(adminOnly(prometheusProxy(cfg.prometheusURL)))
+		mux.Handle("GET /prometheus", http.RedirectHandler(prometheusPath, http.StatusMovedPermanently))
+		mux.Handle("GET "+prometheusPath, prometheus)
+		// The UI sends queries as POSTs. POST goes no further than the query API: not to /-/quit or /-/reload,
+		// which the Prometheus chart turns on (web.enable-lifecycle). The admin API under api/v1/admin/ would
+		// take POSTs, but it is off unless Prometheus runs with web.enable-admin-api.
+		mux.Handle("POST "+prometheusPath+"api/v1/", prometheus)
+	}
 	return securityHeaders(canonical(mux))
+}
+
+// prometheusPath is where Administrators see Prometheus. Requests keep their path on the way to Prometheus, so
+// Prometheus must serve under the same prefix (prometheus.server.prefixURL and baseURL in helm/values.yaml).
+const prometheusPath = "/prometheus/"
+
+// prometheusContentSecurityPolicy replaces contentSecurityPolicy on Prometheus's responses. Its UI needs an
+// inline script, which Prometheus fills in on every request, so no hash fits it, and its components set inline
+// styles. Only Administrators get these pages, from Prometheus itself.
+const prometheusContentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; " +
+	"style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; " +
+	"form-action 'self'; frame-ancestors 'none'"
+
+// prometheusProxy passes requests to the Prometheus server at target, path and query unchanged. Prometheus
+// learns nothing about the person: their session cookie and oauth2-proxy's headers stay here.
+func prometheusProxy(target *url.URL) http.Handler {
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(target)
+			h := r.Out.Header
+			h.Del("Cookie")
+			h.Del("Authorization")
+			for name := range h {
+				if strings.HasPrefix(name, "X-Forwarded-") || strings.HasPrefix(name, "X-Auth-Request-") {
+					h.Del(name)
+				}
+			}
+		},
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", prometheusContentSecurityPolicy)
+		proxy.ServeHTTP(w, r)
+	})
 }
 
 // contentSecurityPolicy lets the pages load scripts, styles and data only from this site, and nothing embed
@@ -198,12 +242,12 @@ func me(w http.ResponseWriter, r *http.Request, p person) {
 }
 
 // siteConfig tells the pages what only the deployment knows. Prometheus's URL is for Administrators only, like
-// its tab, so everyone else gets "".
+// its tab, so everyone else gets "", as does everyone when there is no Prometheus.
 func siteConfig(cfg config) personHandler {
 	return func(w http.ResponseWriter, r *http.Request, p person) {
 		prometheusURL := ""
-		if slices.Contains(p.groups, adminGroup) {
-			prometheusURL = cfg.prometheusLinkURL
+		if cfg.prometheusURL != nil && slices.Contains(p.groups, adminGroup) {
+			prometheusURL = prometheusPath
 		}
 		writeJSON(w, map[string]any{"metabaseUrl": cfg.metabaseLinkURL, "prometheusUrl": prometheusURL})
 	}

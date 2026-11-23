@@ -222,6 +222,9 @@ services:
     image: prom/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      # Under /prometheus, as in Kubernetes, so the web server can pass /prometheus/ on unchanged. The route
+      # prefix follows the external URL's path.
+      - '--web.external-url=/prometheus'
     ports:
       - 9090:9090
     restart: unless-stopped
@@ -240,7 +243,8 @@ services:
       GROUP_FILE: /groups/group.txt
       OPA_URL: http://web-opa:8181
       METABASE_LINK_URL: http://localhost:8080
-      PROMETHEUS_LINK_URL: http://localhost:9090
+      # Shown to Administrators at http://localhost:8000/prometheus/.
+      PROMETHEUS_URL: http://prometheus:9090
       SCHEMA_FILE: /groups/schema.json
       STATUS_FILE: /groups/status.json
       # The names of the files in trino/catalog; keep them in step. The properties

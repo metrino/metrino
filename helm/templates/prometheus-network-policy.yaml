@@ -1,0 +1,26 @@
+# Only the web pod may connect to Prometheus: Administrators see it through the web server, behind its sign-in and
+# group check (web/server.go). Without the web site, nothing may. Only ingress is restricted, so Prometheus still
+# scrapes Metabase and Trino. The Prometheus chart's own networkPolicy can't do this: it admits every source.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-server
+  labels:
+    {{- include "metrino.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  podSelector:
+    # The Prometheus server's pod, from the Prometheus chart's own label helper.
+    matchLabels:
+      {{- include "prometheus.server.matchLabels" (dict "Values" .Values.prometheus "Release" .Release "Chart" (dict "Name" "prometheus")) | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "metrino.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: web
+      ports:
+        - protocol: TCP
+          port: 9090
