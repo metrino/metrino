@@ -76,7 +76,7 @@ jobs:
               IFS=. read -r MAJOR MINOR PATCH <<< "${LAST#v}" 
               VERSION="$MAJOR.$MINOR.$((PATCH + 1))-dev.$GITHUB_RUN_NUMBER+$TAG"
             else
-              VERSION="0.0.0-dev-$GITHUB_RUN_NUMBER+$TAG"
+              VERSION="0.0.0-dev.$GITHUB_RUN_NUMBER+$TAG"
             fi
             echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
