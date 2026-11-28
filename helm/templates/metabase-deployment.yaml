@@ -6,7 +6,7 @@ metadata:
     {{- include "metrino.labels" . | nindent 4 }}
 
 spec:
-  replicas: 1
+  replicas: {{ .Values.metabase.replicas }}
   selector:
     matchLabels:
       {{- include "metrino.selectorLabels" . | nindent 6 }}
